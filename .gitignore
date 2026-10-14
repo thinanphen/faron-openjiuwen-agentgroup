@@ -82,3 +82,6 @@ runtime/.skills-visibility.json*
 
 # openJiuwen 运行期可见性缓存
 runtime/skills-visibility.json
+
+# 暂存的 CI 工作流（待补 workflow scope 后移回 .github/workflows/）
+_hold/
