@@ -175,32 +175,70 @@ python run_online.py           # 由 6 个成员自主完成一次委托
 
 ```
 faron-openjiuwen-agentgroup/
-├── README.md
+├── README.md                     ← 本文件
 ├── LICENSE                       Apache-2.0（与 openJiuwen 生态一致）
 ├── requirements.txt
-├── .gitignore
-├── .github/workflows/ci.yml      自动跑测试向量
-├── docs/
-│   ├── 01-贴合度评估与整改建议.md
-│   ├── 02-源码级复核补充.docx
-│   ├── 03-AgentGroup方案.md      框架设计 / 通信协议 / 接口定义
+├── .gitignore  .gitattributes  .env.example  conftest.py
+│
+├── docs/                         ★ 评估、方案与实现说明
+│   ├── 01-贴合度评估与整改建议.md   11 项整改清单（G1–G12）+ 17 天路线图
+│   ├── 02-源码级复核补充.docx      源码级复核发现的 2 个上游问题
+│   ├── 03-AgentGroup方案.md       框架设计 / 通信协议 / 接口定义 / 模型选型
 │   └── 04-AgentGroup实现说明.md
-├── src/faron_agentgroup/
+│
+├── src/faron_agentgroup/         ★ Agent Group 实现
 │   ├── __init__.py
-│   ├── citation.py               ★ 引用解析 + 两段自检（对齐 agent.ts）
-│   ├── kg.py                     ★ 知识图谱（对齐 db.rs 种子与 kg.ts）
+│   ├── citation.py               引用解析 + 两段自检（逐条对齐 agent.ts）
+│   ├── kg.py                     知识图谱（对齐 db.rs 种子与 kg.ts）
 │   ├── tools_legal.py            法库 + 官方 5 个工具
 │   ├── audit.py                  两段自检与图谱工具（Agent 可调用）
 │   ├── config.py                 模型池 / 5 类任务 / 四角色提示词
-│   └── group.py                  ★ Agent Group 规格装配 + 门面
+│   └── group.py                  Agent Group 规格装配 + 门面
+│
 ├── tests/test_citation_audit.py  24 组测试向量
 ├── probe_build.py                最小构建探针
 ├── run_offline_demo.py           端到端演示（不需要模型）
 ├── run_online.py                 在线运行（需要模型）
-└── runtime/                      产出：交付物 .docx + 取证日志 .json
+├── runtime/                      产出：交付物 .docx + 取证日志 .json
+│
+├── 资料/                          ★ 参赛材料（提交包整理版）
+│   ├── README.md                 材料导航
+│   ├── 大文件说明.md              两个超限大文件的 SHA256 与获取方式
+│   ├── README-评委先读.md          建议最先读
+│   ├── 01-演示视频-分镜与素材/      分镜 + 3套字幕 + 2套配音稿 + 品牌素材
+│   ├── 02-产品介绍PPT/
+│   ├── 03-项目计划书/
+│   ├── 04-产品演示站/              demo.html（单文件零依赖，双击离线可开）
+│   ├── 05-移动端与安装说明/
+│   └── 06-用户调研/                107 份问卷 + 结果 PDF
+│
+└── 源码/                          ★ 上游内部文档与仓库元信息
+    ├── README.md                 文档导航 + 对齐依据说明
+    ├── Legal-Workspace/          上游 README / CHANGELOG / package.json
+    └── Legal-Workspace-docs/      docs/01–12 内部文档（技术架构/数据库/路线图/联邦配方进化）
 ```
 
 ---
+
+## 协作与推送
+
+仓库公开，`main` 分支。使用 **Git Credential Manager** 授权，无需 PAT：
+
+```bash
+git clone https://github.com/thinanphen/faron-openjiuwen-agentgroup.git
+cd faron-openjiuwen-agentgroup
+
+# 首次 push 会弹浏览器，点 Authorize 即可；凭据存进系统凭据管理器
+git add -A
+git commit -m "your message"
+git push
+```
+
+> 大文件（477 MB 演示视频、135 MB 安装包）**不在仓库里**，见
+> [`资料/大文件说明.md`](资料/大文件说明.md) —— 含 SHA256 校验值与三种获取方式。
+
+---
+
 
 ## 测试覆盖
 
