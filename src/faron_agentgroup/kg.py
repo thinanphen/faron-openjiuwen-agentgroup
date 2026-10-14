@@ -149,6 +149,29 @@ KG_SEED: List[KgSeedCase] = [
 ]
 
 
+#: 图谱法条节点的**别名表**（修 G12）。
+#:
+#: 问题：第二段自检 `audit_applicability` 用 `same_law`（名称互含）判断
+#: 「引用是否落在案由图谱的请求权基础范围内」。但两侧命名口径不同：
+#:
+#:     图谱种子（db.rs KG_SEED）：`美国法典 Title 15 — 商业与贸易`（中文）
+#:     法库返回（laws.title）   ：`United States Code, Title 15`（英文）
+#:
+#: 两者互不包含 → **被误判为「超范围」**，产生噪音。
+#:
+#: 上游 `kg_node` 表**本来就有 `name_alt` 字段**（db.rs 表结构里写着），
+#: 只是种子播种时从未填入。本实现补上，并让骨架同时输出 name 与 name_alt。
+LAW_NAME_ALT: Dict[str, str] = {
+    "民法": "Civil Code",
+    "商法": "Commercial Code",
+    "会社法": "Companies Act",
+    "民事訴訟法": "Code of Civil Procedure",
+    "美国法典 Title 15 — 商业与贸易": "United States Code, Title 15",
+    "美国法典 Title 11 — 破产": "United States Code, Title 11",
+    "美利坚合众国宪法": "Constitution of the United States",
+}
+
+
 # ---------------------------------------------------------------------------
 # 内存图谱（对应 db.rs 的 kg_node / kg_edge 表 + 幂等播种）
 # ---------------------------------------------------------------------------
@@ -206,7 +229,8 @@ class KnowledgeGraph:
                 e = self.node_id("element", el_name, source="人工策展")
                 self.edge_id(c, KG_REL_ELEMENT, e, source="人工策展", confirmed=True)
                 for law in laws:
-                    l = self.node_id("law", law, source="人工策展", confidence=1.0,
+                    l = self.node_id("law", law, name_alt=LAW_NAME_ALT.get(law),
+                                     source="人工策展", confidence=1.0,
                                      note="只写法律名，不写具体条号（避免编造）")
                     self.edge_id(e, KG_REL_LAW, l, source="人工策展", confirmed=True)
             for ev_name, el_name in sc.evidences:
@@ -327,13 +351,28 @@ class KnowledgeGraph:
             elif e["rel"] == KG_REL_DOC and dst["type"] == "doc":
                 docs.append(dst["name"])
 
-        law_names = [n["name"] for n in sub["nodes"] if n["type"] == "law"]
+        # 修 G12：骨架同时输出法条节点的**中文名与别名**，
+        # 使 audit_applicability 的 same_law（名称互含）能在两种命名口径间对上。
+        law_names: List[str] = []       # 匹配用（含别名）
+        law_display: List[str] = []     # 展示用（只主名）
+        for n in sub["nodes"]:
+            if n["type"] != "law":
+                continue
+            law_display.append(n["name"])
+            law_names.append(n["name"])
+            alt = n.get("name_alt")
+            if alt:
+                law_names.append(alt)
+
         return {
             "case": case_name,
             "elements": list(elements.values()),
             "issues": list(dict.fromkeys(issues)),
             "docs": list(dict.fromkeys(docs)),
+            #: 匹配用全名集合（主名 + 别名）
             "lawNames": list(dict.fromkeys(law_names)),
+            #: 展示用主名集合 —— 报告里只列这个，避免中英名混排
+            "lawNamesDisplay": list(dict.fromkeys(law_display)),
         }
 
     def describe_skeleton(self, sk: dict) -> str:

@@ -2,7 +2,7 @@
 
 > 基于 **openJiuwen `agent-core`（`openjiuwen.agent_teams`）** 的多智能体协同编排。
 > **逐条对齐** 法元真实实现：`Legal-Workspace` `feature/赛事版` @ 0.7.2
-> 方案文档：[`../01-方案/法元Faron-AgentGroup方案.md`](../01-方案/法元Faron-AgentGroup方案.md)
+> 方案文档：[`03-AgentGroup方案.md`](03-AgentGroup方案.md)
 > 2026-10-13 ｜ **已在真机跑通：24/24 测试通过 + 端到端出 .docx**
 
 ---
@@ -74,7 +74,7 @@
 pip install openjiuwen==0.1.19
 pip install opentelemetry-exporter-otlp-proto-http opentelemetry-exporter-otlp-proto-grpc
 
-cd 02-agentgroup
+cd faron-openjiuwen-agentgroup
 python probe_build.py                 # spec 可被官方框架构建
 python tests/test_citation_audit.py   # 24 组向量（含★反例点名）
 python run_offline_demo.py            # 端到端出 .docx，不需要模型
@@ -173,7 +173,7 @@ token 去重
 ## 七、目录结构
 
 ```
-02-agentgroup/
+
 ├── faron_agentgroup/
 │   ├── __init__.py            包入口与导出
 │   ├── citation.py            ★ 引用解析 + 两段自检（逐条对齐 agent.ts）

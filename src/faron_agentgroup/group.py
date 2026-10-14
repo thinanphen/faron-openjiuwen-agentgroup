@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """法元 · Faron Agent Group —— 规格装配与团队构建。
 
-方案文档：`../01-方案/法元Faron-AgentGroup方案.md`
-真实实现对齐：`../_source/Legal-Workspace`（feature/赛事版 @ 0.7.2）
+方案文档：`docs/03-AgentGroup方案.md`
+真实实现对齐：`github.com/lin612320/Legal-Workspace` feature/赛事版 @ 0.7.2（内部文档见 `源码/`）
 
     §三 成员定义  → build_faron_spec()
     §四 通信协议  → 由 openJiuwen agent_teams 原生提供
@@ -72,18 +72,80 @@ def _cards(tools) -> list:
     return [t.card if hasattr(t, "card") else t for t in tools]
 
 
-def register_tools() -> int:
-    """把法元工具箱注册到 openJiuwen 资源管理器。返回成功注册数。"""
+def register_tools(*, verbose: bool = False) -> dict:
+    """把法元工具箱注册到 openJiuwen 资源管理器。
+
+    ⚠️ 这里曾有一个误导性的实现（编号 E6）：
+    原版用 ``try/except`` 计数，但 ``ResourceManager.add_tool`` **返回 ``Result``
+    而不抛异常** —— 失败时只会得到一个 ``Err`` 对象，except 分支永不触发。
+    于是 ``tools_registered`` 恒等于工具总数（12），**并不代表真的注册成功**。
+
+    现在改为按 ``Result`` 的 ``is_ok`` / ``ok`` 判定，并把失败原因真实回报。
+
+    Args:
+        verbose: 是否打印每个工具的注册结果。
+
+    Returns:
+        dict: {"total", "ok", "failed", "skipped", "errors": [...], "names": [...]}
+            - ok      : 注册成功（含 skip_if_exists 命中的幂等成功）
+            - skipped : 因已存在而跳过（幂等，视为成功）
+            - failed  : 真正失败，errors 里带原因
+    """
     from openjiuwen.core.runner import Runner
 
-    ok = 0
+    names, errors = [], []
+    ok = failed = skipped = 0
+
     for t in FARON_TOOLS:
+        tname = getattr(getattr(t, "card", None), "name", str(t))
         try:
-            Runner.resource_mgr.add_tool(t, skip_if_exists=True)
+            res = Runner.resource_mgr.add_tool(t, skip_if_exists=True)
+        except Exception as exc:  # noqa: BLE001  —— 只兜住真异常，不作为成功依据
+            failed += 1
+            errors.append(f"{tname}: {type(exc).__name__}: {exc}")
+            if verbose:
+                print(f"[tools] ✗ {tname} 异常：{type(exc).__name__}: {exc}")
+            continue
+
+        # Result 对象：有 is_ok / ok 属性则据此判定；否则退化为「未抛异常即成功」
+        is_ok = None
+        for attr in ("is_ok",):
+            v = getattr(res, attr, None)
+            if isinstance(v, bool):
+                is_ok = v
+                break
+            if callable(v):
+                try:
+                    is_ok = bool(v())
+                    break
+                except Exception:  # noqa: BLE001
+                    pass
+        if is_ok is None:
+            # 退一步：靠 Result 是否带 error 判定
+            err_probe = getattr(res, "error", None) or getattr(res, "err", None)
+            is_ok = err_probe is None and not isinstance(res, BaseException)
+
+        if is_ok:
             ok += 1
-        except Exception as exc:  # noqa: BLE001
-            print(f"[tools] 注册失败：{type(exc).__name__}: {exc}")
-    return ok
+            if verbose:
+                print(f"[tools] ✓ {tname}")
+        else:
+            err = getattr(res, "error", None) or getattr(res, "err", None) or res
+            msg = str(err)
+            # 因已存在而跳过是幂等成功，不计失败
+            if "exist" in msg.lower() or "duplicate" in msg.lower():
+                skipped += 1
+                if verbose:
+                    print(f"[tools] = {tname} 已存在（幂等跳过）")
+            else:
+                failed += 1
+                errors.append(f"{tname}: {msg}")
+                if verbose:
+                    print(f"[tools] ✗ {tname}: {msg}")
+
+    names = [getattr(getattr(t, "card", None), "name", str(t)) for t in FARON_TOOLS]
+    return {"total": len(FARON_TOOLS), "ok": ok, "skipped": skipped,
+            "failed": failed, "errors": errors, "names": names}
 
 
 def _to_team_model(ep: cfg.LLMEndpoint) -> TeamModelConfig:
@@ -258,10 +320,16 @@ class FaronAgentGroup:
 
     def __init__(self, conf: Optional[cfg.FaronConfig] = None):
         self.conf = conf or cfg.load_config_from_env()
-        self.tools_registered = register_tools()
+        #: 工具注册结果（dict，含 total/ok/skipped/failed）—— 修 E6：不再是误导性的计数
+        self.tool_registration = register_tools()
         self.spec = build_faron_spec(self.conf)
         Path(self.conf.workspace_root).mkdir(parents=True, exist_ok=True)
         self._agent = None
+
+    @property
+    def tools_registered(self) -> int:
+        """**真正注册成功**的工具数（含幂等跳过）。修 E6 前此值恒等于工具总数且不可信。"""
+        return self.tool_registration["ok"]
 
     @property
     def agent(self):
@@ -301,7 +369,7 @@ class FaronAgentGroup:
         sk = KG.skeleton(case_name)
         if sk is None:
             return None
-        return _f(REGISTRY.refs, sk["lawNames"])
+        return _f(REGISTRY.refs, sk["lawNames"], sk.get("lawNamesDisplay"))
 
     def describe(self) -> dict:
         """输出团队编制摘要，供材料/答辩引用。"""
@@ -317,6 +385,13 @@ class FaronAgentGroup:
             "tools": [t.card.name if hasattr(t, "card") else str(t)
                       for t in FARON_TOOLS],
             "tool_count": len(FARON_TOOLS),
+            # 修 E6：区分「声明了几个工具」与「真正注册成功几个」
+            "tool_registration": {
+                "ok": self.tool_registration["ok"],
+                "skipped": self.tool_registration["skipped"],
+                "failed": self.tool_registration["failed"],
+                "errors": self.tool_registration["errors"],
+            },
             "enable_hitt": self.spec.enable_hitt,
             "dispatch_mode": self.spec.dispatch_mode,
             "teammate_mode": self.spec.teammate_mode,

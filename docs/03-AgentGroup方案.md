@@ -123,6 +123,23 @@
 
 ## 四、通信协议
 
+> ⚠️ **状态口径（P1-4 修订）**：本节属**方案选型讨论**，其中部分能力**代码中尚未启用**。
+> 请以下列口径为准，切勿把「讨论过」读成「已使用」：
+>
+> | 能力 | 状态 |
+> |---|---|
+> | `model_pool` + `model_pool_strategy="by_model_name"` | ✅ 已装配 |
+> | `enable_hitt` / `enable_permissions` / `StorageSpec(sqlite)` / `TransportSpec(inprocess)` | ✅ 已装配 |
+> | `dispatch_mode="scheduled"` | 🚧 **规划中**（当前实例为 `autonomous`） |
+> | `enable_swarmflow` | 🚧 **规划中**（未启用） |
+> | `model_router` / `model_intelli_router` | 🚧 **规划中**（未配置） |
+> | 跨进程 `pyzmq` / `hybrid` | 🚧 **规划中**（当前 `inprocess`） |
+> | `openjiuwen.symphony` | ❌ **未采用**（仅评估阶段提及，代码零引用） |
+>
+> 任务板工具（`create_task` 等）与 `send_message` 虽在框架中可用，
+> 但**本仓库尚未真正驱动**——运行层现状见根 README「运行层现状」一节。
+
+
 ### 4.1 协议栈（全部来自 openJiuwen 官方，非自研）
 
 | 层 | openJiuwen 组件 | 作用 |
@@ -268,6 +285,23 @@ await agent.human_agent_say("批准", to="team_leader")  # 以人类身份发言
 
 ### 6.2 模型池选型（`model_pool_strategy`）
 
+> ⚠️ **状态口径（P1-4 修订）**：本节属**方案选型讨论**，其中部分能力**代码中尚未启用**。
+> 请以下列口径为准，切勿把「讨论过」读成「已使用」：
+>
+> | 能力 | 状态 |
+> |---|---|
+> | `model_pool` + `model_pool_strategy="by_model_name"` | ✅ 已装配 |
+> | `enable_hitt` / `enable_permissions` / `StorageSpec(sqlite)` / `TransportSpec(inprocess)` | ✅ 已装配 |
+> | `dispatch_mode="scheduled"` | 🚧 **规划中**（当前实例为 `autonomous`） |
+> | `enable_swarmflow` | 🚧 **规划中**（未启用） |
+> | `model_router` / `model_intelli_router` | 🚧 **规划中**（未配置） |
+> | 跨进程 `pyzmq` / `hybrid` | 🚧 **规划中**（当前 `inprocess`） |
+> | `openjiuwen.symphony` | ❌ **未采用**（仅评估阶段提及，代码零引用） |
+>
+> 任务板工具（`create_task` 等）与 `send_message` 虽在框架中可用，
+> 但**本仓库尚未真正驱动**——运行层现状见根 README「运行层现状」一节。
+
+
 | 策略 | 语义 | 本方案用途 |
 |---|---|---|
 | `by_model_name` | 按模型名分组轮转，每组均衡分配 | **主策略**：不同成员用不同能力档位的模型 |
@@ -284,6 +318,23 @@ await agent.human_agent_say("批准", to="team_leader")  # 以人类身份发言
 | 质检员 | **不依赖模型**（纯函数为主） | 确定性规则才是可信来源 |
 
 ### 6.3 关键配置（`TeamAgentSpec`）
+
+> ⚠️ **状态口径（P1-4 修订）**：本节属**方案选型讨论**，其中部分能力**代码中尚未启用**。
+> 请以下列口径为准，切勿把「讨论过」读成「已使用」：
+>
+> | 能力 | 状态 |
+> |---|---|
+> | `model_pool` + `model_pool_strategy="by_model_name"` | ✅ 已装配 |
+> | `enable_hitt` / `enable_permissions` / `StorageSpec(sqlite)` / `TransportSpec(inprocess)` | ✅ 已装配 |
+> | `dispatch_mode="scheduled"` | 🚧 **规划中**（当前实例为 `autonomous`） |
+> | `enable_swarmflow` | 🚧 **规划中**（未启用） |
+> | `model_router` / `model_intelli_router` | 🚧 **规划中**（未配置） |
+> | 跨进程 `pyzmq` / `hybrid` | 🚧 **规划中**（当前 `inprocess`） |
+> | `openjiuwen.symphony` | ❌ **未采用**（仅评估阶段提及，代码零引用） |
+>
+> 任务板工具（`create_task` 等）与 `send_message` 虽在框架中可用，
+> 但**本仓库尚未真正驱动**——运行层现状见根 README「运行层现状」一节。
+
 
 | 配置 | 值 | 说明 |
 |---|---|---|
@@ -302,7 +353,7 @@ await agent.human_agent_say("批准", to="team_leader")  # 以人类身份发言
 
 ## 七、验证证据（方案已跑通的部分）
 
-**探针脚本**：`02-agentgroup/probe_build.py`（真机执行）
+**探针脚本**：`probe_build.py`（真机执行）
 
 ```
 ======================================================================

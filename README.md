@@ -63,22 +63,59 @@
 ## 使用的 openJiuwen 组件与能力
 
 > 对应赛事答题要求：「如使用 openJiuwen 生态，请说明使用了哪些组件/能力」。
+>
+> ⚠️ **P1-4 修订**：本表严格区分「已装配（代码中存在）」与「规划中（代码中不存在）」。
+> 赛事「参赛须知」把「提交任何虚假信息」列为取消资格项，
+> 因此凡未落地的一律标注为规划中，**不计入已使用能力**。
+> 同类标注也已加入 `docs/03-AgentGroup方案.md` 与 `docs/01-贴合度评估与整改建议.md`。
 
-| openJiuwen 组件 | 在本项目中的用途 | 收益 |
+### 已装配（代码中可核验）
+
+| openJiuwen 组件 | 在本项目中的用途 | 代码位置 |
 |---|---|---|
-| `openjiuwen.agent_teams.TeamAgentSpec` | 团队与成员规格装配 | 声明式定义，JSON 可序列化、可跨进程分发 |
-| `LeaderSpec` / `TeamMemberSpec` | 主理与成员身份（`desc` 公开 / `prompt` 私有） | 官方 schema 原生表达身份隔离 |
-| `TeamRole` | 角色体系（`LEADER` / `TEAMMATE` / `HUMAN_AGENT`） | 人员与真人统一建模 |
-| `enable_hitt`（Human-in-the-Team） | 计划卡「需人工确认」闸门 | 框架级人审，替代自研闸门 |
-| 任务板工具 `create_task` / `claim_task` / `view_task` / `member_complete_task` | 任务分派与认领 | 官方协同协议，替代自研状态机 |
-| 消息工具 `send_message` | 成员间唯一联系通道 | 官方通信协议 |
-| `list_members` | roster 查询 | 成员自查同伴 |
-| `model_pool` / `model_pool_strategy`（`by_model_name`） | 按能力档位给成员分配模型 | 多端点分摊，兑现「多模型编排」 |
-| `StorageSpec`（sqlite） | 团队与任务持久化 | 与本地优先定位一致 |
-| `TransportSpec`（inprocess） | 成员间消息总线 | 单机零依赖 |
-| `TeamAgent.stream()` / `interact()` / `human_agent_say()` | 运行、介入、人审发言 | 官方运行接口 |
-| `openjiuwen.core.foundation.tool.tool` | 把法元工具声明为 `LocalFunction` | 官方工具协议 |
-| `Runner.resource_mgr.add_tool()` | 工具注册 | 官方资源管理 |
+| `TeamAgentSpec` / `LeaderSpec` / `TeamMemberSpec` | 团队与成员规格装配（6 成员 / 12 工具） | `src/faron_agentgroup/group.py` |
+| `TeamRole`（`LEADER`/`TEAMMATE`/`HUMAN_AGENT`） | 角色体系，人员与真人统一建模 | `group.py` |
+| `AgentCard` / `DeepAgentSpec` | 成员身份卡与私有工作约定（`desc` 公开 / `prompt` 私有） | `group.py` |
+| `enable_hitt`（Human-in-the-Team） | 人类复核员成员（审批闸门） | `group.py`（值 `True`） |
+| `model_pool` + `ModelPoolEntry` + `model_pool_strategy="by_model_name"` | 按能力档位给成员分配模型（强模型 / 轻量模型） | `group.py` |
+| `ModelClientConfig` / `ModelRequestConfig` / `TeamModelConfig` | 模型端点配置 | `group.py` |
+| `StorageSpec`（sqlite） | 团队与任务持久化 | `group.py` |
+| `TransportSpec`（inprocess） | 成员间消息总线（单机） | `group.py` |
+| `enable_permissions` | 权限收敛开关（法务场景） | `group.py` / `config.py` |
+| `openjiuwen.core.foundation.tool.tool` | 把法元 12 个工具声明为 `LocalFunction` | `src/faron_agentgroup/tools_legal.py` / `audit.py` |
+| `Runner.resource_mgr.add_tool()` | 工具注册（按 `Result` 判定成败） | `group.py` |
+| `TeamAgentSpec.build()` / `model_dump_json()` / `model_validate_json()` | 构建与跨进程分发/恢复 | `probe_build.py` |
+| `TeamAgent.stream()` / `interact()` / `human_agent_say()` | 运行、介入、人审发言接口 | `group.py` 门面 |
+
+### 规划中（代码中**不存在**，不计入已使用能力）
+
+| 组件 | 当前状态 | 说明 |
+|---|---|---|
+| 任务板工具 `create_task` / `claim_task` / `view_task` / `member_complete_task` | 🚧 **规划中** | 框架原生提供，本仓库**尚未真正驱动**；见下方「运行层现状」 |
+| 消息工具 `send_message` / `list_members` | 🚧 **规划中** | 同上 |
+| `dispatch_mode="scheduled"` | 🚧 **规划中** | 当前实例为 `autonomous`（默认值） |
+| `enable_swarmflow` | 🚧 **规划中** | 未启用 |
+| `model_router` / `model_intelli_router` | 🚧 **规划中** | 未配置；当前用 `model_pool` |
+| 跨进程传输 `pyzmq` / `hybrid` | 🚧 **规划中** | 当前为 `inprocess` 单机 |
+| `openjiuwen.symphony` | ❌ **未采用** | 仅方案评估阶段提及，代码中零引用 |
+| `openjiuwen.agent_teams.memory` / `reliability` | ❌ **未采用** | 未配置 |
+
+### 运行层现状（如实说明）
+
+**装配层是真的，运行层尚未跑通。**
+
+- **装配层**：`probe_build.py` 逐成员验证——5 个 agent 成员各自解析到
+  **自己的 spec 与工具集**（不同 spec 对象数 5/5），`build()` 成功构造 `TeamAgent`。
+  这条有测试防线：`tests/test_assembly.py`（9 组）。
+- **运行层**：`run_offline_demo.py` 演示的是**六步流程与两段自检**，
+  其工具调用是**顺序 `await tool.invoke()`**，**并未真正驱动框架的任务板与成员消息**。
+  因此上表中的任务板 / `send_message` / HITL 审批虽已声明，**尚无运行事实**。
+- **在线运行**：`run_online.py` 已就绪但**未取得模型 Key**，
+  故**零成功运行记录**，不得声称已跑通多智能体协同。
+
+> 这条边界将在「技术方案」正文中同样如实标注。
+> 我们宁可把「装配已完成、运行闭环待 DEMO 阶段完成」写清楚，
+> 也不虚报一次不存在的协同运行。
 
 ---
 
@@ -96,21 +133,36 @@ pip install opentelemetry-exporter-otlp-proto-http opentelemetry-exporter-otlp-p
 
 Python 3.11–3.13（在 3.12.10 上验证）。
 
-### 三步复现（不需要任何模型 Key）
+### 四步复现（不需要任何模型 Key）
 
 ```bash
-# 1. 验证 spec 可被 openJiuwen 官方框架构建
-python probe_build.py
-#    期望：build() 成功：TeamAgent role=leader
+# 0. 零依赖验证：证明两段自检不需要 openJiuwen、也不需要 Key（修 E12）
+python tests/verify_zero_dep.py
+#    期望：6 项全 ✓，末行「结论：两段确定性自检不需要 openJiuwen、不需要 API Key 即可复现」
 
-# 2. 引用自检与知识图谱的测试向量（24 组，含反例点名）
-python tests/test_citation_audit.py
-#    期望：24 通过 / 0 失败
+# 1. 装配正确性：逐成员解析到各自声明的 spec 与工具集（E1 防线）
+python probe_build.py
+#    期望：末行「结论：Agent Group 装配正确 —— 全部成员解析到各自的 spec 与工具集」
+#          输出含「不同 spec 对象数：5 / 5」
+
+# 2. 测试向量（31 + 9 组，含反例点名与装配防线）
+python tests/test_citation_audit.py     # 期望：31 通过 / 0 失败
+python tests/test_assembly.py           # 期望：9 通过 / 0 失败
 
 # 3. 离线端到端：图谱定案由 → 检索 → 起草 → 两段自检 → 导出 .docx
 python run_offline_demo.py
-#    期望：6 步全绿，runtime/ 下生成新的 deliverable_*.docx
+#    期望：STEP 1–6 全部执行完毕，退出码 0，
+#          runtime/ 下生成新的 deliverable_*.docx 与 runlog_*.json
+#
+#    ⚠️ 注意（修 E8）：本演示**故意**在起草稿里埋了一个库外条号「第9999条」，
+#       所以第一段自检的结论**本来就是 ok=false**（这正是要展示的能力）。
+#       因此判据是「是否走完全部 6 步」，**不是**「自检通过」。
+#       第二段自检（适用性）在 G12 修复后应报「全部引用均落在范围内」。
 ```
+
+> **修 E8 说明**：原 README 写「期望：6 步全绿」，容易被误读为「自检应通过」。
+> 实际 STEP 5 第一段必然 `ok=false`（埋雷被点名），脚本仍返回 0 —— 这是**设计意图**，
+> 不是失败。现已在上面写清判据。
 
 ### 在线运行（需要模型接口）
 
@@ -128,7 +180,8 @@ python run_online.py           # 由 6 个成员自主完成一次委托
 
 ## 最该看的一条证据
 
-`runtime/deliverable_20261013-232806.docx` 的「四、引用自检」段：
+`runtime/` 下**最新**的 `deliverable_*.docx`（**文件名随时间戳变化，请以实际生成的文件为准**）
+的「四、引用自检」段：
 
 > 识别到条文号引用 2 处（去重）
 > 与「本次工具真实返回」法条对应：1/2
@@ -137,6 +190,11 @@ python run_online.py           # 由 6 个成员自主完成一次委托
 
 `第9999条` 是**故意埋进起草稿的库外条号**，被代码级规则当场点名——不是模型自查。
 文末附 **2 张 Word 原生表格**：第一段逐条判定 + 第二段适用性校验。
+
+> **修 E7 说明**：原 README 此处硬编码了 `deliverable_20261013-232806.docx`
+> 这个**并不存在于仓库中**的文件名（仓库里的是另一次运行的时间戳）。
+> 取证文件名会随每次运行变化，因此改为引用「最新文件」并说明判据，
+> 不再硬编码一个会过期的字符串。
 
 ---
 

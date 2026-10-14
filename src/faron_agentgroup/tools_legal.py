@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import unicodedata
@@ -48,7 +49,19 @@ class Article:
 
     @property
     def id(self) -> int:
-        return abs(hash((self.country, self.title, self.article_no))) % (10 ** 9)
+        """稳定标识 —— 必须跨进程可复现。
+
+        ⚠️ 这里曾用 ``abs(hash((country,title,article_no))) % 1e9``（编号 E5）。
+        Python 的字符串 hash 默认开启随机化（PYTHONHASHSEED），
+        因此**每个进程得到不同的 id** —— runlog / .docx 里记录的 id 无法复现，
+        取证材料对不上号。
+
+        现改为确定性摘要（blake2b 取 8 字节 → 63 位正整数）。
+        同一法条在任何进程、任何机器上永远得到同一 id。
+        """
+        raw = f"{self.country}\x1f{self.title}\x1f{self.article_no}".encode("utf-8")
+        digest = hashlib.blake2b(raw, digest_size=8).digest()
+        return int.from_bytes(digest, "big") & ((1 << 63) - 1)
 
     def to_ref(self, limit: int = 420) -> LawRef:
         """转成 LawRef（对齐 tools.ts `lawToRef()`：excerpt 截断 420 字）。"""
@@ -168,7 +181,7 @@ def laws_search(keyword: str, country: str = "", limit: int = 5) -> str:
     Returns:
         JSON 字符串：{"keyword":..., "hits":[...], "total":N}
     """
-    q = unicodedata.normalize("NFKC", (keyword or "").strip())
+    q = unicodedata.normalize("NFKC", (keyword or "").strip()).casefold()
     c = (country or "").strip().upper()
     if not q:
         return json.dumps({"keyword": "", "hits": [], "total": 0,
@@ -178,15 +191,26 @@ def laws_search(keyword: str, country: str = "", limit: int = 5) -> str:
     for a in DEMO_LAWS:
         if c and a.country != c:
             continue
+        # 大小写不敏感匹配（修 E4）：原实现用大小写敏感子串匹配，
+        # 导致 `trademark` 命中 §1051 却漏 §1125（其 chapter 为大写 "Trademarks"）。
         hay = unicodedata.normalize(
-            "NFKC", f"{a.title} {a.title_zh} {a.chapter} {a.article_no} {a.content}")
+            "NFKC", f"{a.title} {a.title_zh} {a.chapter} {a.article_no} {a.content}"
+        ).casefold()
         if q in hay:
             hits.append(_hit(a))
-            REGISTRY.record(a.to_ref())
 
+    # ⚠️ 顺序很重要（修 E3）：必须【先截断、后登记】。
+    # 原实现在截断前就把全部命中登记进「本次工具真实返回」，
+    # 导致登记集合可能包含【并未真正返回给模型】的法条 —— 自检口径被放宽。
     hits = hits[: max(1, int(limit or 5))]
+    for h in hits:
+        art = find_by_article_no(h["article_no"])
+        if art is not None and art.country == h["country"]:
+            REGISTRY.record(art.to_ref())
+
     return json.dumps({"keyword": q, "country": c or "ALL", "hits": hits,
-                       "total": len(hits), "matched": bool(hits)},
+                       "total": len(hits), "matched": bool(hits),
+                       "returned_count": len(hits)},
                       ensure_ascii=False, indent=2)
 
 

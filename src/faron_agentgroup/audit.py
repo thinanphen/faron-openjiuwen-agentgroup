@@ -91,7 +91,9 @@ def audit_applicability_tool(case_name: str) -> str:
             "report_markdown": "- 未命中知识图谱案由，跳过适用性校验。",
         }, ensure_ascii=False, indent=2)
 
-    a = audit_applicability(REGISTRY.refs, sk["lawNames"])
+    # 修 G12：匹配用全名（含别名）+ 展示用主名，避免报告中英混排
+    a = audit_applicability(REGISTRY.refs, sk["lawNames"],
+                            sk.get("lawNamesDisplay"))
     payload = a.to_dict()
     payload["case"] = sk["case"]
     payload["report_markdown"] = applicability_report(a)
