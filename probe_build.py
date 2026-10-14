@@ -1,135 +1,138 @@
 # -*- coding: utf-8 -*-
-"""最小构建探针：验证 openJiuwen TeamAgentSpec 能否被官方框架构建。
+"""法元 · Faron Agent Group —— 构建探针（含逐成员 spec 区分）。
 
-目的：在写方案文档之前，先证明「法元 Agent Group」的成员规格是可落地的。
-不调用真实模型，只验证 spec 校验与 TeamAgent 构建。
+【本文件为什么要重写】
+    旧版 `probe_build.py` 自建了一个**独立的小型 spec**（只有 3 个成员、
+    成员名还是早期的 `law_retriever/drafter/citation_auditor`），从未验证
+    `group.py` 里真正使用的 `build_faron_spec()`。
+    因此它**盖不住 E1 那个装配 bug** —— 旧版照样打印"build() 成功"。
+
+    现在改为直接验证真实装配，并**逐成员打印解析到的 spec 与工具集**，
+    使任何"成员被兜底"的问题在探针阶段就可见。
+
+运行：
+    python probe_build.py
 """
 
-import asyncio
+from __future__ import annotations
+
+import os
 import sys
 
-from openjiuwen.agent_teams import (
-    TeamAgentSpec,
-    LeaderSpec,
-    TeamMemberSpec,
-    TeamRole,
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+
+from openjiuwen.agent_teams import TeamAgentSpec  # noqa: E402
+from openjiuwen.agent_teams.agent.agent_configurator import AgentConfigurator  # noqa: E402
+from openjiuwen.agent_teams.schema.team import TeamRole  # noqa: E402
+
+from faron_agentgroup.group import (  # noqa: E402
+    M_AUDITOR,
+    M_DRAFTER,
+    M_HUMAN,
+    M_KG,
+    M_LEADER,
+    M_RETRIEVER,
+    build_faron_spec,
 )
-from openjiuwen.agent_teams.schema.deep_agent_spec import (
-    DeepAgentSpec,
-    TeamModelConfig,
-)
-from openjiuwen.agent_teams.models.pool import ModelPoolEntry
-from openjiuwen.core.foundation.llm import ModelClientConfig, ModelRequestConfig
-from openjiuwen.core.single_agent.schema.agent_card import AgentCard
+
+#: 期望编制（与 docs/04 编制表一致）
+AGENT_MEMBERS = [M_LEADER, M_RETRIEVER, M_KG, M_DRAFTER, M_AUDITOR]
 
 
-def build_model_config(model_name: str, base_url: str, api_key: str) -> TeamModelConfig:
-    return TeamModelConfig(
-        model_client_config=ModelClientConfig(
-            client_provider="openai",
-            api_key=api_key,
-            api_base=base_url,
-            verify_ssl=False,
-        ),
-        model_request_config=ModelRequestConfig(model=model_name),
-    )
+def tool_names(spec) -> list:
+    out = []
+    for t in (spec.tools or []):
+        n = getattr(t, "name", None)
+        if n:
+            out.append(n)
+    return sorted(out)
 
 
-def make_spec() -> TeamAgentSpec:
-    """构造「法元 · 小元」文书智能体团队规格（4 个 AI 成员 + 1 个人类复核员）。"""
-    placeholder = build_model_config(
-        "PLACEHOLDER_MODEL", "https://api.example.com/v1", "sk-placeholder"
-    )
-
-    leader = DeepAgentSpec(
-        card=AgentCard(
-            id="faron_team_leader",
-            name="小元·主理",
-            description="法元文书智能体的团队主理：理解委托、拆分任务、汇总交付。",
-        ),
-        system_prompt=(
-            "你是法元 · Faron 文书智能体的团队主理「小元」。"
-            "你把一份涉外法律委托拆成可并行的子任务，分派给检索员、起草员、质检员，"
-            "并把质检结论与交付物汇总给用户。"
-            "硬规则：交付物中的每一条法条引用必须来自检索员真实返回的条文，不得凭记忆书写。"
-        ),
-        model=placeholder,
-    )
-
-    def teammate(name, display, card_id, desc, prompt):
-        return TeamMemberSpec(
-            member_name=name,
-            display_name=display,
-            desc=desc,
-            prompt=prompt,
-            role_type=TeamRole.TEAMMATE,
-        )
-
-    return TeamAgentSpec(
-        team_name="faron_wenshu_team",
-        agents={"leader": leader},
-        leader=LeaderSpec(
-            member_name="team_leader",
-            display_name="小元·主理",
-            desc="团队主理，负责规划、分派与交付汇总。",
-        ),
-        predefined_members=[
-            teammate(
-                "law_retriever", "检索员·民商",
-                "faron_retriever",
-                "在内置日美法库中检索真实法条并回传溯源信息。",
-                "你只做一件事：用本地法库工具检索法条，返回条文号 + 篇名 + 来源。绝不臆造条文。",
-            ),
-            teammate(
-                "drafter", "起草员",
-                "faron_drafter",
-                "依据检索结果与模板起草文书正文。",
-                "你只允许引用检索员真实返回的法条，输出固定五段式文书正文。",
-            ),
-            teammate(
-                "citation_auditor", "质检员·引用自检",
-                "faron_auditor",
-                "代码级逐条对账引用，点名未覆盖项。",
-                "你用确定性规则逐条比对正文引用与本次工具真实返回，未覆盖项一律点名，不计为有效引用。",
-            ),
-        ],
-        enable_hitt=True,
-        teammate_mode="build_mode",
-        dispatch_mode="autonomous",
-        spawn_mode="inprocess",
-        storage=None,
-        language="cn",
-    )
+def role_of(name: str) -> TeamRole:
+    if name == M_LEADER:
+        return TeamRole.LEADER
+    if name == M_HUMAN:
+        return TeamRole.HUMAN_AGENT
+    return TeamRole.TEAMMATE
 
 
 def main() -> int:
-    print("=" * 70)
-    print("openJiuwen TeamAgentSpec 构建探针")
-    print("=" * 70)
-    spec = make_spec()
-    print(f"[1] spec 校验通过：team_name={spec.team_name}")
+    print("=" * 78)
+    print("法元 · Faron Agent Group —— 构建探针（真实装配 + 逐成员 spec 区分）")
+    print("=" * 78)
+
+    # ---------- [1] 真实 spec 校验 ----------
+    spec = build_faron_spec()
+    print(f"[1] 真实 build_faron_spec() 校验通过：team_name={spec.team_name}")
+    print(f"    agents 字典键      = {sorted(spec.agents.keys())}")
     print(f"    predefined_members = {[m.member_name for m in spec.predefined_members]}")
     print(f"    enable_hitt        = {spec.enable_hitt}")
     print(f"    spawn_mode         = {spec.spawn_mode}")
+    print(f"    dispatch_mode      = {spec.dispatch_mode}")
 
+    # ---------- [2] 逐成员 spec 区分（E1 防线）----------
+    print("\n[2] 逐成员解析（走 SDK 真实 resolve_agent_spec 路径）")
+    print(f"    {'成员':<20} {'role':<12} {'spec 对象 id':<16} 工具集")
+    print("    " + "-" * 74)
+    resolved_ids = {}
+    rows = []
+    for name in AGENT_MEMBERS:
+        r = AgentConfigurator.resolve_agent_spec(spec, role_of(name), name)
+        oid = id(r)
+        resolved_ids[name] = oid
+        tools = tool_names(r)
+        rows.append((name, role_of(name).value, oid, tools))
+        print(f"    {name:<20} {role_of(name).value:<12} {oid:<16} {tools}")
+
+    distinct = len(set(resolved_ids.values()))
+    ok_distinct = distinct == len(AGENT_MEMBERS)
+    print(f"\n    不同 spec 对象数：{distinct} / {len(AGENT_MEMBERS)}  "
+          f"{'✅ 各成员互不干扰' if ok_distinct else '❌ 存在成员被兜底（E1 回归）'}")
+
+    # ---------- [3] 成员身份隔离抽查 ----------
+    print("\n[3] 成员身份隔离抽查（prompt 不得互相污染）")
+    markers = {
+        M_LEADER: "团队主理",
+        M_RETRIEVER: "检索员成员",
+        M_KG: "图谱策展成员",
+        M_DRAFTER: "起草员成员",
+        M_AUDITOR: "质检员成员",
+    }
+    ok_prompt = True
+    for name, marker in markers.items():
+        r = AgentConfigurator.resolve_agent_spec(spec, role_of(name), name)
+        hit = marker in (r.system_prompt or "")
+        ok_prompt &= hit
+        print(f"    {name:<20} 含「{marker}」：{'✅' if hit else '❌'}")
+    print(f"    {'→ 全部通过' if ok_prompt else '→ 存在身份污染'}")
+
+    # ---------- [4] JSON 往返 ----------
     dumped = spec.model_dump_json()
-    print(f"[2] JSON 序列化成功：{len(dumped)} 字符（可跨进程分发）")
+    back = TeamAgentSpec.model_validate_json(dumped)
+    ok_rt = set(back.agents.keys()) == set(spec.agents.keys())
+    print(f"\n[4] JSON 序列化 {len(dumped)} 字符；往返后 agents 键一致：{'✅' if ok_rt else '❌'}")
 
+    # ---------- [5] 真实 build() ----------
+    print("\n[5] spec.build() 真实构建 TeamAgent")
     try:
         agent = spec.build()
     except Exception as exc:  # noqa: BLE001
-        print(f"[3] build() 失败：{type(exc).__name__}: {exc}")
+        print(f"    ❌ build() 失败：{type(exc).__name__}: {exc}")
         return 1
-    print(f"[3] build() 成功：{type(agent).__name__}  role={agent.role.value}")
-    print(f"    member_name = {agent._member_name()}")
-    print(f"    leader_member_name = {agent.team_spec.leader_member_name}")
-    print(f"    model_pool_strategy = {agent.team_spec.model_pool_strategy}")
+    print(f"    ✅ build() 成功：{type(agent).__name__}  role={agent.role.value}")
+    print(f"       member_name         = {agent._member_name()}")
+    print(f"       leader_member_name  = {agent.team_spec.leader_member_name}")
+    print(f"       model_pool_strategy = {agent.team_spec.model_pool_strategy}")
 
-    spec2 = TeamAgentSpec.model_validate_json(dumped)
-    print(f"[4] 反序列化成功：team_name={spec2.team_name}（跨进程恢复可用）")
-    print("=" * 70)
-    print("结论：Agent Group 成员规格可被 openJiuwen 官方框架构建。")
-    return 0
+    # ---------- 结论 ----------
+    all_ok = ok_distinct and ok_prompt and ok_rt
+    print("\n" + "=" * 78)
+    if all_ok:
+        print("结论：Agent Group 装配正确 —— 全部成员解析到各自的 spec 与工具集。")
+    else:
+        print("结论：❌ 装配存在问题，见上方标记。")
+    print("=" * 78)
+    return 0 if all_ok else 1
 
 
 if __name__ == "__main__":

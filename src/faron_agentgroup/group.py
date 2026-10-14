@@ -175,7 +175,31 @@ def build_faron_spec(conf: Optional[cfg.FaronConfig] = None) -> TeamAgentSpec:
         model=_to_team_model(fast), max_iterations=25, **base,
     )
 
-    agents = {"leader": leader, "teammate": retriever}
+    # ---- agents 字典必须按【成员名】逐一登记 ----
+    #
+    # ⚠️ 这里曾有一个会让整个「多智能体」叙事崩塌的装配 bug（编号 E1）：
+    #   原写法 agents={"leader": leader, "teammate": retriever}
+    #   而 SDK 的解析顺序是（agent_configurator.py:965-973）：
+    #       if member_name and member_name in spec.agents:
+    #           return spec.agents[member_name]
+    #       return spec.agents.get(role.value) or spec.agents.get("teammate") or spec.agents["leader"]
+    #   kg_curator / drafter / citation_auditor 的 member_name 都不在字典里，
+    #   于是全部落到 "teammate" 兜底 —— 三个成员运行时拿到的是【检索员的 spec
+    #   与检索员的工具集】，而且框架静默兜底、不报错。
+    #   后果：质检员拿不到 audit_citations，「两段自检」这个核心卖点在运行时不存在。
+    #
+    # 修法：按 member_name 建键，让每个成员解析到自己的 DeepAgentSpec。
+    # 保留 "teammate" 键作为动态 spawn 新成员时的兜底 spec。
+    # 回归防护见 tests/test_assembly.py::test_each_member_resolves_own_spec。
+    agents = {
+        "leader": leader,
+        M_RETRIEVER: retriever,
+        M_KG: kg_curator,
+        M_DRAFTER: drafter,
+        M_AUDITOR: auditor,
+        # 角色键兜底：动态 spawn_member（未预定义成员）时使用
+        "teammate": retriever,
+    }
 
     predefined: List[TeamMemberSpec] = [
         TeamMemberSpec(member_name=M_RETRIEVER, display_name="检索员·民商",
