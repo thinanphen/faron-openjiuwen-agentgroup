@@ -1,0 +1,16 @@
+# 运行本仓库所需依赖
+#
+# Python 3.11 – 3.13（在 3.12.10 上验证）
+
+# openJiuwen AgentGroup 框架（本项目承载框架）
+openjiuwen==0.1.19
+
+# openJiuwen 的 TeamAgent.build() 会进入可观测性作用域，需要 OTLP exporter；
+# 缺这两个包会在 build() 时报：
+#   ModuleNotFoundError: No module named 'opentelemetry.exporter'
+# 注意：openjiuwen 的 [observability] extra 只带 api/sdk，不带 exporter，故单独列出。
+opentelemetry-exporter-otlp-proto-http>=1.25.0
+opentelemetry-exporter-otlp-proto-grpc>=1.25.0
+
+# 交付物 .docx 生成（openjiuwen 已间接依赖 python-docx，此处显式声明以保证可复现）
+python-docx>=1.2.0
