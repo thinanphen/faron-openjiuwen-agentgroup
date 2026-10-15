@@ -153,6 +153,11 @@ Python 3.11–3.13（在 3.12.10 上验证）。
 
 ### 四步复现（不需要任何模型 Key）
 
+> **最省事：一条命令跑完全部**（9 项，含 Skill 自证与清单一致性）
+> ```bash
+> python tools/run_all_checks.py
+> ```
+
 ```bash
 # 0. 零依赖验证：证明两段自检不需要 openJiuwen、也不需要 Key（修 E12）
 python tests/verify_zero_dep.py

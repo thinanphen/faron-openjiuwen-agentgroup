@@ -1,7 +1,22 @@
+---
+name: citation-audit
+version: 0.1.0
+author: 法元 Faron（thinanphen / lin612320）
+description: 判定法律文本里的法条引用是否真实存在、是否落在本案由请求权基础范围内。纯确定性规则，不调用任何大模型，零三方依赖。
+tags: [legal, citation, verification, deterministic, offline]
+allowed_tools: [readFile, writeFile]
+---
+
 # 法条引用自检（citation-audit）
 
 > **一句话**：判定一段法律文本里的法条引用是否真实存在、是否落在本案由的请求权基础范围内。
 > 判定**不调用任何大模型**，是纯确定性规则，因此结论可复现、可用反例现场验证。
+
+> **格式说明**：本文件遵循 **JiuwenSwarm Skill 规范**（`docs/en/Skills.md`）。
+> 首个 `---` 与第二个 `---` 之间是 **YAML frontmatter**（元数据），
+> 其后是 **skill body**（Agent 遵循的指令）。
+> Frontmatter 里的 `name` 必须与**目录名一致**（本目录即 `citation-audit/`），
+> 否则导入会被拒绝（`SKILL_SYNC_INVALID_PAYLOAD`）。
 
 ---
 

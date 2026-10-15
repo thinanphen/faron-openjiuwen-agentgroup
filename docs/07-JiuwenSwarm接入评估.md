@@ -130,17 +130,78 @@ python skill/citation-audit/scripts/verify_no_deps.py
 
 ## 四、如实标注：**未验证**的部分
 
+> ⚠️ **本节在第四轮（R4-P2-2）已更新**：原先「jiuwenswarm 的 Skill 装载规范未查阅」
+> 一项已被推翻 —— 我拿到了官方规范，据此改造了 Skill，并新增自证脚本。见 §四.1。
+
 | 项 | 状态 | 说明 |
 |---|---|---|
 | Skill 包本身可运行 | ✅ **已实测** | 上面的命令与输出都是真跑出来的 |
 | 零三方依赖 | ✅ **已实测** | `verify_no_deps.py` 用 import 拦截 + 断言 |
-| **SkillHub 上传 / 注册流程** | ❌ **未验证** | 未在真实 SkillHub 实例上注册过。需要：一个可访问的 SkillHub 部署（或社区实例）+ 账号。**上传格式是否与 `SKILL.md` 约定一致，未经核对** |
-| **被 JiuwenSwarm 作为 Skill 装载并调用** | ❌ **未验证** | 未在 jiuwenswarm 里装载过。需要：jiuwenswarm 可运行环境 + 模型 Key |
-| jiuwenswarm 的 Skill 装载规范 | ❌ **未查阅** | 本次未取到 jiuwenswarm 的 Skill 接口文档，故未按其规范裁剪 |
+| **Skill 符合 jiuwenswarm 规范** | ✅ **已实测** | 14 条断言全过，见 §四.1 |
+| **SkillHub 上传 / 注册流程** | ❌ **未验证** | 未在真实实例上注册过。需要：可访问的 SkillHub 部署（或社区实例）+ 账号 |
+| **被 jiuwenswarm 作为 Skill 装载并调用** | ❌ **未验证** | 未在 jiuwenswarm 里实际装载过。需要：jiuwenswarm 可运行环境 + 模型 Key |
 
 **因此本文不声称「已完成 JiuwenSwarm 接入」。**
-准确表述是：**已完成一个可被 SkillHub 分发的 Skill 资产，并实测其零依赖可运行；
-上传与装载环节未验证。**
+准确表述是：**已完成一个符合规范的、可被本地导入或 SkillHub 分发的 Skill 资产，
+并实测其零依赖可运行；上传与装载环节未验证。**
+
+---
+
+### 四.1 Skill 规范符合性（第四轮新增，已实测）
+
+**规范来源**（实查 2026-10-15）：
+
+- `https://raw.githubusercontent.com/openJiuwen-ai/jiuwenswarm/develop/docs/en/Skills.md`
+- 仓库：`github.com/openJiuwen-ai/jiuwenswarm`（GitCode 侧为 `gitcode.com/openJiuwen/jiuwenswarm`）
+- 生态入口：**Swarm Skills Hub** — `https://swarmskills.openjiuwen.com/`
+
+**规范的关键硬要求**（原文）：
+
+> The `SKILL.md` must start with a `---` YAML frontmatter block containing both
+> `name` and `description` — **bare `.md` files or directories without a valid
+> `SKILL.md` frontmatter are not importable**.
+
+> **目录名必须与 frontmatter 的 `name` 一致**，否则导入被拒
+> （`SKILL_SYNC_INVALID_PAYLOAD`：*directory name mismatch with frontmatter name*）。
+
+**我们原先的 `SKILL.md` 没有 frontmatter，因此按 jiuwenswarm 标准是「不可导入」的。**
+第四轮已补上：
+
+```yaml
+---
+name: citation-audit          # 与目录名 skill/citation-audit 一致
+version: 0.1.0
+author: 法元 Faron（thinanphen / lin612320）
+description: 判定法律文本里的法条引用是否真实存在、是否落在本案由请求权基础范围内。纯确定性规则，不调用任何大模型，零三方依赖。
+tags: [legal, citation, verification, deterministic, offline]
+allowed_tools: [readFile, writeFile]
+---
+```
+
+**并新增自证脚本** `skill/citation-audit/scripts/verify_skill_spec.py`，
+把「符合规范」这句话变成 **14 条可执行断言**（含最易漏的两条：
+「目录名 = frontmatter name」与「description 不含 `<`/`>`」）。
+
+**实测结果**：
+
+```
+$ python skill/citation-audit/scripts/verify_skill_spec.py
+结果：14 通过 / 0 未通过 / 共 14
+结论：本 Skill 符合 JiuwenSwarm Skill 规范，可通过「导入本地 Skill」装载
+```
+
+**装载方式（照规范）**：
+
+1. **本地导入** —— 左侧栏 → Skills → Import local skill → 填**绝对路径**
+   （规范要求绝对路径或 `~/` 路径；相对路径会被拒绝）
+2. **手工拷贝** —— 复制到 `~/.jiuwenswarm/agent/workspace/skills/`
+   （Windows 为 `C:\Users\<用户名>\.jiuwenswarm\agent\workspace\skills\`）
+3. **Agent Team 共用** —— 规范说明团队与成员**不各自持有 skills 目录**，只声明可见性，
+   所以**装一次，单智能体与团队成员都能用**
+
+> **仍未验证**：上述三条装载路径我**都没有在真实的 jiuwenswarm 里跑过**。
+> 已验证的是「文件形态符合规范」；未验证的是「实际装载与调用」。
+> 这个区分很重要 —— 不要把「格式合规」说成「已接入」。
 
 ---
 

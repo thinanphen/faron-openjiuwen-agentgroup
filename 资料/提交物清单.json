@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-15T22:56:03+08:00",
+  "_生成时间": "2026-10-15T23:03:53+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -18,7 +18,7 @@
   },
   "_统计": {
     "files": 91,
-    "bytes": 46993447
+    "bytes": 46997188
   },
   "files": [
     {
@@ -48,8 +48,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 23972,
-      "sha256": "D3C7DA7B054787033FC650D678B9938A83F62289A68F6273CE636F03366B6C2C"
+      "bytes": 24113,
+      "sha256": "1E43EF3A4EEC972DAEA0406644792B01AE50575F532F2E5E1A91C228A7AF4433"
     },
     {
       "path": "conftest.py",
@@ -88,8 +88,8 @@
     },
     {
       "path": "docs/07-JiuwenSwarm接入评估.md",
-      "bytes": 9421,
-      "sha256": "042612FD45E52B2F437E87F7560C9865198277214015A355ABCBFA17C2C6CE33"
+      "bytes": 12248,
+      "sha256": "76B0CC1204835747ECEE3D0C55C89BAEFD93A44855D95AAA5CD180FB9CBC698F"
     },
     {
       "path": "probe_build.py",
@@ -113,8 +113,8 @@
     },
     {
       "path": "skill/citation-audit/SKILL.md",
-      "bytes": 6462,
-      "sha256": "6FEBBED8D6939D3E2D859D69132EBCA5896BC270C72432F5AE885534A85D7D62"
+      "bytes": 7235,
+      "sha256": "BFB8D1A6677796949FE8109BBA48727B59B13FCC94A6F16648CCC43BA813FBB8"
     },
     {
       "path": "skill/citation-audit/scripts/audit_citations.py",
