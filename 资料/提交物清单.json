@@ -1,0 +1,475 @@
+{
+  "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
+  "_生成方式": "python tools/gen_manifest.py",
+  "_校验方式": "python tools/gen_manifest.py --check",
+  "_生成时间": "2026-10-15T22:50:01+08:00",
+  "_算法": "SHA256（大写十六进制）",
+  "_条目来源": "git ls-files",
+  "_排除项及理由": {
+    ".git": "版本库元数据，非提交物",
+    "__pycache__": "Python 字节码缓存，随解释器版本变化",
+    "runtime": "运行产出物（.docx / runlog），每次运行都变；核验其存在性即可",
+    "logs": "运行日志（openJiuwen 运行期输出）；已被 .gitignore，不属于提交物",
+    "_hold": "本机暂存目录；已被 .gitignore",
+    "交付补丁": "由 git format-patch 从提交生成的交付方式，非交付内容",
+    "提交物清单.json": "本清单自身；自引用无法得到稳定哈希",
+    ".DS_Store": "macOS 编辑器产物",
+    "Thumbs.db": "Windows 缩略图缓存"
+  },
+  "_统计": {
+    "files": 90,
+    "bytes": 46978084
+  },
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 1119,
+      "sha256": "2A7197C70C88248F4AACE0B2056C04913EA8ACEFDC5586261C75A4F1E35209DB"
+    },
+    {
+      "path": ".gitattributes",
+      "bytes": 46,
+      "sha256": "A71C45BDC1261BF1EBD0EBD3E4BA9F44732201C1590F5A11A9C83C187FB1559B"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 1116,
+      "sha256": "3D18BFC6FEB5335A07437C6DD542AF49D9267DAA64A434651932A34FA51A0B67"
+    },
+    {
+      "path": "AI工作须知.md",
+      "bytes": 15816,
+      "sha256": "B4940F16E06DD4B8179C9369D6873D62AE6C742A2A7C10C5BCADC5807474D92B"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 11376,
+      "sha256": "504C97B5A491E0C4AE1D0C8040ED6CF15FAADCF3E1D1D442C548F9541E7F3834"
+    },
+    {
+      "path": "README.md",
+      "bytes": 23972,
+      "sha256": "D3C7DA7B054787033FC650D678B9938A83F62289A68F6273CE636F03366B6C2C"
+    },
+    {
+      "path": "conftest.py",
+      "bytes": 233,
+      "sha256": "106F21A133729F5999D60E590FFAAD575967A9ED2C4F76262124804421F46C3A"
+    },
+    {
+      "path": "docs/01-贴合度评估与整改建议.md",
+      "bytes": 32757,
+      "sha256": "A82B071CFACE698C6794FA35F9763A721EF94990E6529B0ED2F2AB887CEF701C"
+    },
+    {
+      "path": "docs/02-源码级复核补充.docx",
+      "bytes": 41257,
+      "sha256": "2FC7D4D3FFF8FAE55877BF8256300E69347CCA8BEA7A11BAF868DB39E0D62E69"
+    },
+    {
+      "path": "docs/03-AgentGroup方案.md",
+      "bytes": 28293,
+      "sha256": "E9D156D5800FDF8BD0504EDDEF20E5F9581DDFE6E188EA5F006CB83A6A4958E5"
+    },
+    {
+      "path": "docs/04-AgentGroup实现说明.md",
+      "bytes": 11089,
+      "sha256": "E11E9F4AB042C6684DDF266284D621BC22CA4FB4C9C695F0AD47462756B95A9E"
+    },
+    {
+      "path": "docs/05-零Key复现路径.md",
+      "bytes": 4530,
+      "sha256": "81233DBA3F859474BDAB6F139EA59A2FA873B1E4C110F57A2F37777296351E48"
+    },
+    {
+      "path": "docs/06-进度与交接记录.md",
+      "bytes": 16270,
+      "sha256": "836AE1670B75107DB91554885A19A6B9D3CCAC3DB4D875C5A27F12EA1D56863D"
+    },
+    {
+      "path": "docs/07-JiuwenSwarm接入评估.md",
+      "bytes": 9421,
+      "sha256": "042612FD45E52B2F437E87F7560C9865198277214015A355ABCBFA17C2C6CE33"
+    },
+    {
+      "path": "probe_build.py",
+      "bytes": 5292,
+      "sha256": "DAC5EAE29352CA4DA34A986FA6F80E6DFC77B6B9E70FD92B96624CBDC52A3D92"
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 933,
+      "sha256": "E1028942514CEA489AC1CFE08F98510FD617147911FFEC94D771DE7999DFC9D8"
+    },
+    {
+      "path": "run_offline_demo.py",
+      "bytes": 13311,
+      "sha256": "F6ED00F509A55AAC0C7BD756DBE6810180E4BB64BC9EA7027885BCBCC0C41099"
+    },
+    {
+      "path": "run_online.py",
+      "bytes": 4346,
+      "sha256": "5CD3C1AD77E0F2C573DD977F12E56AADDFB82014EFE8DE15FFAF79AAEF4D21F1"
+    },
+    {
+      "path": "skill/citation-audit/SKILL.md",
+      "bytes": 6462,
+      "sha256": "6FEBBED8D6939D3E2D859D69132EBCA5896BC270C72432F5AE885534A85D7D62"
+    },
+    {
+      "path": "skill/citation-audit/scripts/audit_citations.py",
+      "bytes": 7135,
+      "sha256": "D8B761B9A1C4936DB625934F9F8DA9602DA08FB16445D7E0D34A707DA3E1F5F6"
+    },
+    {
+      "path": "skill/citation-audit/scripts/verify_no_deps.py",
+      "bytes": 6392,
+      "sha256": "B6B392CF67069156D3A01DB787DD65B0C6BD2CD8646CAF723869DAC50BBC6F07"
+    },
+    {
+      "path": "src/faron_agentgroup/__init__.py",
+      "bytes": 3469,
+      "sha256": "19D48D3D23A01824A04BFD53DEE51E6DAC92503B39B9A63D078865E4B692A61D"
+    },
+    {
+      "path": "src/faron_agentgroup/audit.py",
+      "bytes": 8892,
+      "sha256": "DE1D81DABB672F837C1C6743E67F430E467ECB1E554525F2E5599F67B46B0FB2"
+    },
+    {
+      "path": "src/faron_agentgroup/citation.py",
+      "bytes": 17927,
+      "sha256": "A0AE1A8CB7376C91E2DB291D391BC6FA4AFD152AC4C3027381D3E91B279DB98F"
+    },
+    {
+      "path": "src/faron_agentgroup/config.py",
+      "bytes": 13979,
+      "sha256": "2399E8971DE05FD9C68A9945AB8079E21F1501F122CA39C6475A397030560A80"
+    },
+    {
+      "path": "src/faron_agentgroup/group.py",
+      "bytes": 17325,
+      "sha256": "692D05A4DE5CDB5729B61816B7FE17E635CDA45CA7C8E8764C23F1DA2629924E"
+    },
+    {
+      "path": "src/faron_agentgroup/kg.py",
+      "bytes": 17237,
+      "sha256": "93201902A93A3A3E6DFA8C77B4EC408DAA04866E01056ECFCB6B46A8ABF41549"
+    },
+    {
+      "path": "src/faron_agentgroup/tools_legal.py",
+      "bytes": 18734,
+      "sha256": "4C4B8B2E6C856A02D1A11A5202C4A95802356BC237DA774D4DFE45B4FF91095E"
+    },
+    {
+      "path": "tests/test_assembly.py",
+      "bytes": 10159,
+      "sha256": "7DA6A66948108A6399F5B24699932B37261D17E3453147DA6CF2A42047A7F556"
+    },
+    {
+      "path": "tests/test_citation_audit.py",
+      "bytes": 27415,
+      "sha256": "437F68BA42FDEB737E922143D9656684B15332C15C30E96C4E66AEF6550E7B90"
+    },
+    {
+      "path": "tests/verify_zero_dep.py",
+      "bytes": 4391,
+      "sha256": "B11A8005BA0179A08E1CAC118D465EBFEECE5F2748D72280FD9FDEC3645BDFA2"
+    },
+    {
+      "path": "任务台账.md",
+      "bytes": 11274,
+      "sha256": "F1ED1397737282ED826A5374D03E444E2404F0E84FE64D32A9084ECEA8E5E584"
+    },
+    {
+      "path": "接手必读.md",
+      "bytes": 20351,
+      "sha256": "F1A3B4813D3BA92464EEC95859387D6D0EACF940B4F79D3E0391B9F57F274C5E"
+    },
+    {
+      "path": "提交包/01-作品名称.md",
+      "bytes": 2412,
+      "sha256": "651136D33EFC6C31D5336C41CB34B08722295E16EDA5F46681488A594AF866A3"
+    },
+    {
+      "path": "提交包/02-项目简介.md",
+      "bytes": 5133,
+      "sha256": "98E81A549995E6900E39156DDD3033823068F241125E3E44FA90356D308E4E63"
+    },
+    {
+      "path": "提交包/03-应用场景说明.md",
+      "bytes": 5923,
+      "sha256": "EFF2A8CEFB93BB9AF267FD18F581E4C9747F9ED4B36198E143DE1E8CD34662AC"
+    },
+    {
+      "path": "提交包/04-技术方案.md",
+      "bytes": 22243,
+      "sha256": "3F1EFFFBCAB51E668F8B25C0DD36EEBCB83DA182D6662142BD9CC14EDB69D9FD"
+    },
+    {
+      "path": "提交包/05-DEMO演示视频.md",
+      "bytes": 5468,
+      "sha256": "66C185C8F904FAE09B1AF88D7E03B72EBC3BAD20CFE95EC9796863987B4E47A4"
+    },
+    {
+      "path": "提交包/06-项目文档.md",
+      "bytes": 8169,
+      "sha256": "E8AA2773835674E17E0E28BF9862F0D7259C0FCFEB8A664CEC8875B42971F363"
+    },
+    {
+      "path": "提交包/README.md",
+      "bytes": 4756,
+      "sha256": "7C60895698D0D4099ECC1E8B64828C6DC451134C32E1E58DC1420CCF82E2CF21"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/01-技术架构.md",
+      "bytes": 20511,
+      "sha256": "9DDAC1E00C239DC2C80396DB9490E5C022162A018CC38975CE7F2F1BDE736EF2"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/02-功能模块.md",
+      "bytes": 25858,
+      "sha256": "2011F552EA9F56C799C29BCD6C405A8B03C9B52F22D07CD5D08CF95F61B88F77"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/03-数据库设计.md",
+      "bytes": 20158,
+      "sha256": "3D99AB4787586C4EC2A162D143C58B480E67E002E36A03E13B957608D071CAF0"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/04-开发与构建指南.md",
+      "bytes": 11973,
+      "sha256": "0C540756BAC13289B7C729C57E14463AE6091C67A74247F5B04A70687151CD28"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/05-优化路线图.md",
+      "bytes": 8277,
+      "sha256": "626D2F613FC74B1006BC111EACB67E7907A1FA0F444097CDC0B2E2FCC334DC3E"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/06-参赛改进方案.md",
+      "bytes": 31396,
+      "sha256": "07BEF9EB037A79181434B2218276E34C3903AA3B529400392EB4D2F034BA767B"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/07-真机验收清单.md",
+      "bytes": 14724,
+      "sha256": "5D844F73FDFA3B4FEEC547C47CC54262A8DA91606D29359A0EA05F5F5459D08F"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/08-参赛材料包.md",
+      "bytes": 31207,
+      "sha256": "28AF099EAE5D0309903A698986E2707D197C22E4DF6C0FDF811F8F263F266A97"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/09-真机验收执行指引.md",
+      "bytes": 10533,
+      "sha256": "1C14A49946FCD89A977577E38F758B064DCBC5CCD77D93A48AF4FB5A87FE3AA4"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/11-赛事版改动说明.md",
+      "bytes": 13360,
+      "sha256": "AB3C9D32E385EA6E3E291AB8FDFAC357A2C0409E6A55939FDF7778A41B08C598"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/12-联邦配方进化方案.md",
+      "bytes": 27482,
+      "sha256": "AE2AC77371A2FACA3F2892942091260F1C8D4DF61039648DD59D2844293CE6B1"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/Feature-Demo-Report-EN.docx",
+      "bytes": 17200,
+      "sha256": "3D447E667CD92F708B14E1F53F80B7A5B27D29F04B5B09E462588DDFE17DF83B"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/Feature-Demo-Report-EN.md",
+      "bytes": 13016,
+      "sha256": "17F708E936856DDED3AC3FD4AE33E5DF71C1B49366627A0B6141A5D72457C908"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/Project-Plan-EN.docx",
+      "bytes": 27654,
+      "sha256": "00CB9DA39A142B158D5C24647834A2DCD8E371398BC6CDC88B01CB144B36DC28"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/Project-Plan-EN.md",
+      "bytes": 27216,
+      "sha256": "2AAFE378FA57C62136F06A8B1E581561B7251DAC686E3449DC61FEC7BF50D38E"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/README.md",
+      "bytes": 7186,
+      "sha256": "1F2795023055E6843C7FACE1BACFAA1FF3DEA084DE2BCB5B2DE52F362DE8DDBC"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/功能演示报告.docx",
+      "bytes": 40949,
+      "sha256": "265695FF3D7B26A1D8095BAD2160CC0721A58B5167712B38BF8B3FB44C057225"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/功能演示报告.md",
+      "bytes": 13181,
+      "sha256": "67DFD5F0A2D341B76A06BA42D0E6401584D0AA9E2F51E0F14F5C9F7DCE9CD67B"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/项目计划书.docx",
+      "bytes": 65586,
+      "sha256": "5E0400B3CE1C9A75D850D7CA2390DFEDC2FA0B0F4A1C71C75C106D37A782C07B"
+    },
+    {
+      "path": "源码/Legal-Workspace-docs/项目计划书.md",
+      "bytes": 50092,
+      "sha256": "DF19B3A41E0BDE7A1DEEDDD3DE5ACEFA976368D0A247D444EC436172AE0B03AD"
+    },
+    {
+      "path": "源码/Legal-Workspace/CHANGELOG.md",
+      "bytes": 43699,
+      "sha256": "A1C3093C3204C7B659A56C7FDCE82981C2FD929B8E85C76990A5E8C990B7DF34"
+    },
+    {
+      "path": "源码/Legal-Workspace/README.md",
+      "bytes": 23682,
+      "sha256": "171C9B5D248E91E6571CEB59BCC91B5025BE5273AB22C8F2D02C4B6AE5A2B9F9"
+    },
+    {
+      "path": "源码/Legal-Workspace/package.json",
+      "bytes": 848,
+      "sha256": "88C1A45E464CAFBE9C48AC7D4C16B2A8DF3642F5D833CCE78C59698B112B60B7"
+    },
+    {
+      "path": "源码/README.md",
+      "bytes": 4935,
+      "sha256": "9B280099F55497DA2221B8D011C4920179A2C00B96936E34DB6D57BEC3081C23"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/13-演示视频分镜脚本.md",
+      "bytes": 14266,
+      "sha256": "A4A1D286A1BB530A7B792FC1F073C2EFE42F501F3394A8BAFDB8B4E460CCAF12"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/分镜与字幕包/README.md",
+      "bytes": 4629,
+      "sha256": "164130AA41EB34F716A57DAE2732D55DE59E397CE497325D26BD3721C3851369"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/分镜与字幕包/narration-3min.txt",
+      "bytes": 2956,
+      "sha256": "232D5C2230DA6F415965758958E135479856149FE87BCB8C983516FF1D646460"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/分镜与字幕包/narration-90s.txt",
+      "bytes": 1240,
+      "sha256": "4419C903D333DAD77EBD93C2F1428F45EC22D9D9CC48DFEB4F353010DB2656CB"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/分镜与字幕包/shotlist.csv",
+      "bytes": 4892,
+      "sha256": "1316A4BA80F9E38FD77DDD8A21E234FBD6C03D2489D3696854E21980D38B54AE"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/分镜与字幕包/shotlist.json",
+      "bytes": 8751,
+      "sha256": "D668D76E92197B8D20852BE5DA8C55621B8F2FAD1F3067343E58188C7CE070E5"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/分镜与字幕包/subtitles-30s-vertical.srt",
+      "bytes": 349,
+      "sha256": "27B2436BDC55127F85395CDEFFF42CAEBCA2F876B44E207DCB014BBE299CCE30"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/分镜与字幕包/subtitles-3min.srt",
+      "bytes": 2591,
+      "sha256": "3C1070E83AEA83F60E944ABAAC97F6F7BD454374CCD014DCB591AFD1E4282425"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/分镜与字幕包/subtitles-90s.srt",
+      "bytes": 948,
+      "sha256": "5012B115A3916BBB87864C51709A70EE2C22A785F0008FA665BEA970407F1B4E"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/品牌素材/corner-badge-wide.png",
+      "bytes": 10661,
+      "sha256": "DEE09F7AC55340515FB486CDCFAE6FF4E667C686AB153234B8CDBA919D899C17"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/品牌素材/corner-badge.png",
+      "bytes": 15521,
+      "sha256": "ABA8C2DDD0C0C8F5D86FA130AA088AF536F0BEEA03671270A0F254B6039304C4"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/品牌素材/end-card.png",
+      "bytes": 208837,
+      "sha256": "BEF81A2274D17FEF3E830A80583B8C689A4FDCDC6CF9B7415686F7E782E3BDA3"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/品牌素材/intro-dark.png",
+      "bytes": 253316,
+      "sha256": "2625EEA583588A77DD69D42CCAA8A44EA1208DF6BD9818897E1D8F59FF9B6ACA"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/品牌素材/intro-light.png",
+      "bytes": 161273,
+      "sha256": "19B2F7C1826F415EF9FD1448AEF430AB9954AC974A044B59870DAAF0ABEB90B6"
+    },
+    {
+      "path": "资料/01-演示视频-分镜与素材/品牌素材/intro-vertical.png",
+      "bytes": 273114,
+      "sha256": "88831DC1B1CD5FFC28DF2D7762A3221BD9ABCEEEDD9AF7B63C62ADC6A570CE73"
+    },
+    {
+      "path": "资料/02-产品介绍PPT/法元Faron产品介绍.pptx",
+      "bytes": 40676046,
+      "sha256": "F9EE3C00E843865C75A6CF5889D89AADCF0B0669DA8E1BB02901B4CB2E54336D"
+    },
+    {
+      "path": "资料/03-项目计划书/项目计划书.docx",
+      "bytes": 109792,
+      "sha256": "DBFBFBCBBC41073C7731E51BABB5216CD6A0D143F7B410FA223C4894875BC1AA"
+    },
+    {
+      "path": "资料/03-项目计划书/项目计划书.md",
+      "bytes": 88451,
+      "sha256": "D74AF9B8FAE0463733B39E7835AB133739361FC4BA3577791ED9EDBEE4FB2AA6"
+    },
+    {
+      "path": "资料/04-产品演示站/demo.html",
+      "bytes": 531604,
+      "sha256": "17E8D01B9777DCC281155BC2AD4962188D7361376C9F9C192491D06D76AFA5BF"
+    },
+    {
+      "path": "资料/05-移动端与安装说明/说明.md",
+      "bytes": 2387,
+      "sha256": "9FB60CD54BD45F808B456DAC6723B2DA1946B774C07874B827816357561243D4"
+    },
+    {
+      "path": "资料/06-用户调研/涉外智能法律助手市场调研问卷_107_107.xlsx",
+      "bytes": 39368,
+      "sha256": "AB25307A4B09472B05F5948C338A6BB24C61FB9F4D407760242F2BA13439824C"
+    },
+    {
+      "path": "资料/06-用户调研/用户问卷结果.pdf",
+      "bytes": 3522936,
+      "sha256": "22D378A8CBA5A86C5F1BCE8AF740DC4C438007C054326192239875C509EE8F86"
+    },
+    {
+      "path": "资料/README-评委先读.md",
+      "bytes": 13140,
+      "sha256": "0CC56CED357099259D4C57431B14657B14AC51E717E9CE362DACBF989D7505C0"
+    },
+    {
+      "path": "资料/README.md",
+      "bytes": 4455,
+      "sha256": "7DA8AAE9ECC5370A81378844FBA294F83325D1A4B9DD7930D9328D169E897B17"
+    },
+    {
+      "path": "资料/大文件说明.md",
+      "bytes": 5309,
+      "sha256": "9F4F491E064E7BB9920938C208D0847D97737626FE705383671031F1540F6BF4"
+    },
+    {
+      "path": "资料/版本清单.json",
+      "bytes": 4106,
+      "sha256": "C10828BB4DBA51327E07D9310723F0BDDC8C1D280E51F57BF96011087B07233B"
+    }
+  ]
+}
