@@ -26,7 +26,7 @@ The **primary scenario is cross-border/cross-jurisdiction legal work involving J
 - **Brand (0.6.0)**: product name/window title/sidebar/notifications/AI prompts/ball panel/deliverable sign-off unified under **法元 · Faron**; agent persona renamed **Xiao Yuan**; engineering identity and user-data directory intentionally unchanged so upgrades never lose data.
 - **Deliverables (packaged)**: `发布包/法元_0.6.0_赛事版_x64-setup.exe` (≈135.1 MB, embeds the preloaded law DB + Floating-Ball Assistant 1.0.1 in versioned dir `win-unpacked-0.6.0`) and portable `发布包/悬浮球助手 1.0.1_赛事版.exe`; mobile demo APK `律政工作台-移动端/发布/法元-移动端-演示-v0.1.0-debug.apk`.
 - **Repository releases**: desktop `lin612320/Legal-Workspace` — `dev` branch tagged `v0.6.0` (mainline) and `feature/赛事版` branch tagged `v0.6.0-赛事版`; mobile demo on `lin612320/legal-workbench-mobile` (`main`).
-- **Competition framing**: presented at the “2026 AI 模型智能体创新大赛（AI 杭州 码动未来）” as the evolution *from a Q&A assistant to a digital employee that delivers artifacts*, with the flagship demo scenario of cross-border Japanese/U.S. legal work.
+- **Competition framing**: presented at the “首届 openJiuwen 智能体创新大赛” as the evolution *from a Q&A assistant to a digital employee that delivers artifacts*, with the flagship demo scenario of cross-border Japanese/U.S. legal work.
 - **Roadmap (v0.7.0, task breakdown in §6.1)**: full Chinese statute corpus ingestion as the main thread, plus data-safety (P0), architecture/experience (P1/P2) and engineering (P3) improvements.
 
 ---
