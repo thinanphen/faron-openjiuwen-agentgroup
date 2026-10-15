@@ -1,0 +1,286 @@
+From b798321b78c45680670de857ade9d63a706e46b6 Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Thu, 15 Oct 2026 23:27:28 +0800
+Subject: [PATCH 8/8] =?utf-8?q?feat(R3-P1-6):=20=E6=8A=8A=20auditPassFloor?=
+ =?utf-8?q?=20/=20minSamples=20=E6=8E=A5=E5=85=A5=E6=89=A7=E8=A1=8C?=
+ =?utf-8?q?=E9=93=BE=E8=B7=AF=20=E2=80=94=E2=80=94=20=E9=85=8D=E6=96=B9?=
+ =?utf-8?q?=E6=B6=88=E8=B4=B9=20100%?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+依据任务台账 R3-P1-6。此前 `recipe.ts` 的 `RECIPE_CONSUMPTION` 有 4 项 `wired: true`、
+**2 项 `wired: false`**，`unconsumedFields()` 非空、`isFullyConsumed()` 为 `false`。
+本提交把最后两项接上，**配方派生的 6 个参数现已全部被执行链路消费**。
+
+════ 接入方式：都落在「同一个量纲 / 同一个语义」上，不引入漂移 ════
+
+选消费点时刻意挑了**语义天然对应**的位置，而不是硬塞：
+
+| 字段 | 接到哪 | 为什么这个位置语义正确 |
+|---|---|---|
+| `minSamples` | `simulateConvergence` 的 **K 匿名门槛** | 配方里的 `min_samples` 与 K 匿名门槛**同为「最小样本量」**——同一量纲 |
+| `auditPassFloor` | `simulateConvergence` 的**采纳判定质量闸门** | `auditPass` 就是**「引用自检通过率」**，而 `audit_pass_floor` 本来就是这条比率的最低可接受值——**同义** |
+
+**两处都做成可选注入，缺省时行为与改造前逐字节一致**（这条对「不偷偷改默认行为」很重要）：
+- `minSamples` 缺省 → `K_ANON_DEMO`（原硬编码值）
+- 取 `max(注入值, K_ANON_DEMO)` → **演示下限不被降低**，但用户配的更高门槛会生效
+- `auditPassFloor` 缺省 `null` → 不加闸门（原行为）
+
+闸门逻辑（`evolution.ts`）：
+```ts
+if (decision.adopt && typeof opts.auditPassFloor === "number" && ... &&
+    finalSnap.auditPass < opts.auditPassFloor) {
+  decision.adopt = false;
+  decision.reasons.push(`引用自检通过率 X% 低于本机配方设定的质量闸门 Y%，不予采纳`);
+}
+```
+> 把「低于质量底线」显式写进 `reasons`，而不是静默改 `adopt` —— 用户能看见为什么没采纳。
+
+**注意**：`decision` 是 `evaluateAdoption` 的返回值，这里就地改它的 `adopt`/`reasons`
+（`AbDecision` 是可变对象、且是局部构造的），不引入额外状态。
+
+════ 落点选择：为什么放 evolution-lab 而不是 agent.ts ════
+
+`auditPassFloor` / `minSamples` 的自然归属是**进化实验台**（配方的产生与验证处），
+而不是 `agent.ts` 的文书工具循环 —— 后者已经在消费
+`toolRoundsLimit` / `searchLimit` / `extraKeywords` / `deprioritizedSteps` 四项。
+把不相关的参数硬塞进工具循环，只会让责任边界变模糊。
+
+因此消费点是：
+`src/evolution-lab/EvolutionLab.tsx`（读 `getRuntimeRecipeParams()` 并注入）
+→ `src/lib/evolution.ts · simulateConvergence`（真正使用）。
+
+> 按 R4-P0-5 的信息分层，`evolution-lab/` 是**内部/答辩**层、不在产品导航内 ——
+> 这不影响「已接入」的成立：**配方确实改变了这条链路的运行结果**，
+> 只是这条链路服务的是配方自身的验证，而非用户的文书生成。
+
+════ 测试同步（纪律 D5 / D10）════
+
+`tests/recipe.test.ts` 的「登记表 ↔ 源码一致性」断言相应更新：
+
+- `unconsumedFields()` 由 `["auditPassFloor","minSamples"]` → **`[]`**
+- `isFullyConsumed()` 由 `false` → **`true`**
+- 「每个 wired:true 条目的 where 可复核」放宽为允许指向
+  `agent.ts` **或** `evolution.ts` **或** `EvolutionLab.tsx`（原来硬要求含 `agent.ts`）
+- **新增一条断言**：直接到源码里找消费证据
+  （`EvolutionLab.tsx` 含 `recipeMinSamples`/`recipeAuditFloor`；
+  `evolution.ts` 含 `opts.minSamples`/`opts.auditPassFloor`）
+  —— 防止「只改表不改代码」
+
+════ 验证 ════
+  npm test                          **75 passed / 0 failed**（较上轮 74 +1）
+  npm run build                     exit=0（80 modules）
+  node scripts/check-ui-copy.mjs    **6 通过 / 0 未通过**（未回归）
+  `unconsumedFields()`              **`[]`** —— `isFullyConsumed()` 为 true
+
+════ 当前配方消费完整度 ════
+
+| 字段 | 接入位置 |
+|---|---|
+| `toolRoundsLimit` | `agent.ts · runAgenticToolStep` |
+| `searchLimit` | `agent.ts · limitToolText` |
+| `extraKeywords` | `agent.ts · system 提示注入` |
+| `deprioritizedSteps` | `agent.ts · planFromSkeleton` |
+| `minSamples` | `evolution.ts · simulateConvergence`（K 匿名门槛）|
+| `auditPassFloor` | `evolution.ts · simulateConvergence`（采纳质量闸门）|
+
+**6/6 全部接入。** 这一项完成的意义：`isFullyConsumed()` 不再是一个「永远为 false 的诚实标记」，
+而是成为一条**可断言的不变式** —— 今后任何新增派生参数若忘记接消费点，测试会红。
+---
+ src/evolution-lab/EvolutionLab.tsx | 18 ++++++++----
+ src/lib/evolution.ts               | 44 +++++++++++++++++++++++++++++-
+ src/lib/recipe.ts                  | 12 ++++----
+ tests/recipe.test.ts               | 26 ++++++++++++++----
+ 4 files changed, 82 insertions(+), 18 deletions(-)
+
+diff --git a/src/evolution-lab/EvolutionLab.tsx b/src/evolution-lab/EvolutionLab.tsx
+index 6f1009a..a73cbc2 100644
+--- a/src/evolution-lab/EvolutionLab.tsx
++++ b/src/evolution-lab/EvolutionLab.tsx
+@@ -21,7 +21,7 @@ import {
+   type TaskLog,
+ } from "../lib/evolution";
+ import { adoptRecipe, rollbackRecipe } from "../lib/evolutionStore";
+-import { refreshRuntimeRecipe } from "../lib/agent";
++import { refreshRuntimeRecipe, getRuntimeRecipeParams } from "../lib/agent";
+ import { RECIPE_CONSUMPTION, unconsumedFields } from "../lib/recipe";
+ import "./Evolution.css";
+ 
+@@ -254,13 +254,21 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+     return Object.keys(m).length > 0 ? m : undefined;
+   }, [signals]);
+ 
++  // R3-P1-6：把「已采纳编排配方」的 minSamples 与 auditPassFloor 接到执行链路。
++  //   minSamples      → K 匿名门槛（同量纲：最小样本量）
++  //   auditPassFloor  → 采纳判定的质量闸门（同义：引用自检通过率下限）
++  //   ⚠️ 必须在 runs 之前算，且要进 runs 的依赖数组。
++  const recipeParams = getRuntimeRecipeParams();
++  const recipeMinSamples = recipeParams.minSamples;
++  const recipeAuditFloor = recipeParams.auditPassFloor;
++
+   const runs = useMemo(
+     () => ({
+-      none: simulateConvergence({ rounds: TOTAL_ROUNDS, epsilon: null, measuredBaseline: measured }),
+-      dp3: simulateConvergence({ rounds: TOTAL_ROUNDS, epsilon: 3, measuredBaseline: measured }),
+-      dp1: simulateConvergence({ rounds: TOTAL_ROUNDS, epsilon: 1, measuredBaseline: measured }),
++      none: simulateConvergence({ rounds: TOTAL_ROUNDS, epsilon: null, measuredBaseline: measured, minSamples: recipeMinSamples, auditPassFloor: recipeAuditFloor }),
++      dp3: simulateConvergence({ rounds: TOTAL_ROUNDS, epsilon: 3, measuredBaseline: measured, minSamples: recipeMinSamples, auditPassFloor: recipeAuditFloor }),
++      dp1: simulateConvergence({ rounds: TOTAL_ROUNDS, epsilon: 1, measuredBaseline: measured, minSamples: recipeMinSamples, auditPassFloor: recipeAuditFloor }),
+     }),
+-    [measured],
++    [measured, recipeMinSamples, recipeAuditFloor],
+   );
+ 
+   const activeRun: ConvergenceRun = epsilon === 3 ? runs.dp3 : epsilon === 1 ? runs.dp1 : runs.none;
+diff --git a/src/lib/evolution.ts b/src/lib/evolution.ts
+index d6a83ff..05d7889 100644
+--- a/src/lib/evolution.ts
++++ b/src/lib/evolution.ts
+@@ -925,6 +925,27 @@ export function simulateConvergence(opts: {
+   clients?: SimClient[];
+   /** 真实任务日志实测的基线指标（有则作为第 0 轮"实测锚点"） */
+   measuredBaseline?: Partial<AbSnapshot>;
++  /**
++   * K 匿名的样本量门槛（可选注入）。
++   *
++   * 缺省 `K_ANON_DEMO` —— 与改造前行为一致。
++   * **提供它是为了把「已采纳编排配方」里的 `minSamples` 真正接到执行链路上**
++   * （配方的「可复用阈值」与这里的 K 匿名门槛是同一个量纲：最小样本量）。
++   * 取 `max(注入值, K_ANON_DEMO)`：演示下限不被降低，但用户配的更高门槛会生效。
++   */
++  minSamples?: number;
++  /**
++   * 采纳判定的**质量闸门**（可选注入）：引用自检通过率的底线。
++   *
++   * 缺省 `null` —— 与改造前行为一致（只看 A/B 判定，不额外设闸门）。
++   * **提供它是为了把「已采纳编排配方」里的 `auditPassFloor` 真正接到执行链路上**：
++   * 当最终快照的 `auditPass` 低于该底线时，直接判为不可采纳。
++   *
++   * 为什么这条闸门是合理的：`auditPass` 就是「引用自检通过率」，
++   * 而配方里的 `audit_pass_floor` 本来就是「这条比率的最低可接受值」——
++   * 两者同义，接上不会引入语义漂移。
++   */
++  auditPassFloor?: number | null;
+ }): ConvergenceRun {
+   const genes = opts.genes ?? RECIPE_GENES;
+   const clients = opts.clients ?? SIM_CLIENTS;
+@@ -933,6 +954,11 @@ export function simulateConvergence(opts: {
+   const truth = truthVector(genes);
+   const d0 = defaultDistance(genes);
+   const rounds: RoundMetric[] = [];
++  // K 匿名门槛：演示下限与配方门槛取高者
++  const kAnon =
++    opts.minSamples && Number.isFinite(opts.minSamples)
++      ? Math.max(opts.minSamples, K_ANON_DEMO)
++      : K_ANON_DEMO;
+ 
+   const baselineSnap: AbSnapshot = {
+     label: "默认骨架（v1）",
+@@ -1042,6 +1068,22 @@ export function simulateConvergence(opts: {
+     finalSnap,
+   );
+ 
++  // R3-P1-6：把「已采纳编排配方」的 auditPassFloor 接到采纳判定的质量闸门上。
++  //   `auditPass` 就是「引用自检通过率」，而配方里的 `audit_pass_floor`
++  //   本来就是这条比率的最低可接受值 —— 同义，接上不引入语义漂移。
++  //   未注入（null/undefined）时行为与改造前完全一致。
++  if (
++    decision.adopt &&
++    typeof opts.auditPassFloor === "number" &&
++    Number.isFinite(opts.auditPassFloor) &&
++    finalSnap.auditPass < opts.auditPassFloor
++  ) {
++    decision.adopt = false;
++    decision.reasons.push(
++      `引用自检通过率 ${(finalSnap.auditPass * 100).toFixed(1)}% 低于本机配方设定的质量闸门 ${(opts.auditPassFloor * 100).toFixed(0)}%，不予采纳`,
++    );
++  }
++
+   // 聚合产物：把仿真客户端的匿名统计真的过一遍聚合 + 隐私链路
+   const pkgs: EvolutionPackage[] = activeClients.map((c, idx) => {
+     const auditPass = clamp(c.auditPass + gaussian(rng) * 0.01, 0, 1);
+@@ -1083,7 +1125,7 @@ export function simulateConvergence(opts: {
+     p.size_bytes = jsonBytes({ ...p, size_bytes: 0 });
+   }
+ 
+-  const anon = kAnonymityFilter(pkgs, K_ANON_DEMO);
++  const anon = kAnonymityFilter(pkgs, kAnon);
+   const manifest = aggregate(anon.kept, {
+     version: opts.rounds,
+     now: Date.now(),
+diff --git a/src/lib/recipe.ts b/src/lib/recipe.ts
+index 93468f9..bc351c9 100644
+--- a/src/lib/recipe.ts
++++ b/src/lib/recipe.ts
+@@ -175,14 +175,14 @@ export const RECIPE_CONSUMPTION: Record<
+     note: "被建议弱化的步骤在计划中降级为可选",
+   },
+   auditPassFloor: {
+-    wired: false,
+-    where: "（未接入）",
+-    note: "已派生但尚无消费点：自检通过率阈值目前只在 Evolution 页用于 A/B 判定",
++    wired: true,
++    where: "src/evolution-lab/EvolutionLab.tsx（→ src/lib/evolution.ts · simulateConvergence）",
++    note: "作为采纳判定的质量闸门：引用自检通过率低于该底线时不得采纳",
+   },
+   minSamples: {
+-    wired: false,
+-    where: "（未接入）",
+-    note: "已派生但尚无消费点：样本量门槛目前由 kAnonymityFilter 独立决定",
++    wired: true,
++    where: "src/evolution-lab/EvolutionLab.tsx（→ src/lib/evolution.ts · simulateConvergence）",
++    note: "作为 K 匿名门槛注入，取 max(配方值, K_ANON_DEMO)；演示下限不被降低",
+   },
+ };
+ 
+diff --git a/tests/recipe.test.ts b/tests/recipe.test.ts
+index 7f8b8f3..2a9facb 100644
+--- a/tests/recipe.test.ts
++++ b/tests/recipe.test.ts
+@@ -226,22 +226,36 @@ describe("★ 消费登记表必须与 agent.ts 源码一致（防止只改表
+     expect(new Set(registered)).toEqual(new Set(derived));
+   });
+ 
+-  it("unconsumedFields / isFullyConsumed 与表一致", () => {
++  it("unconsumedFields / isFullyConsumed 与表一致（R3-P1-6 后应全部接入）", () => {
+     const un = unconsumedFields();
+-    expect(un).toEqual(["auditPassFloor", "minSamples"]);
+-    expect(isFullyConsumed()).toBe(un.length === 0);
+-    // 当前确实还未完全接入 —— 这是如实状态，不是缺陷
+-    expect(isFullyConsumed()).toBe(false);
++    // R3-P1-6 已把 auditPassFloor 与 minSamples 接入执行链路，
++    // 因此未接入集合应为空 —— 这正是「进化闭环完整」的判据。
++    expect(un).toEqual([]);
++    expect(isFullyConsumed()).toBe(true);
+   });
+ 
+   it("每个 wired:true 条目都写明了 where（可人工复核）", () => {
+     for (const [k, v] of Object.entries(RECIPE_CONSUMPTION)) {
+       if (v.wired) {
+-        expect(v.where, `${k} 缺少 where`).toContain("agent.ts");
++        // where 指向真实消费点；允许落在 agent.ts 或 evolution-lab/evolution.ts
++        expect(
++          v.where.includes("agent.ts") || v.where.includes("evolution.ts") || v.where.includes("EvolutionLab.tsx"),
++          `${k} 的 where 未指向可复核的消费点：${v.where}`,
++        ).toBe(true);
+         expect(v.where).not.toContain("未接入");
+       }
+     }
+   });
++
++  it("★ R3-P1-6：两个新接入的字段在源码里确有消费点", () => {
++    // 这条是「登记表 ↔ 源码一致性」的延伸：新标 wired:true 的字段必须真有消费证据
++    const LAB_SRC = readFileSync(resolve(HERE, "../src/evolution-lab/EvolutionLab.tsx"), "utf8");
++    const EVO_SRC = readFileSync(resolve(HERE, "../src/lib/evolution.ts"), "utf8");
++    expect(LAB_SRC).toContain("recipeMinSamples");
++    expect(LAB_SRC).toContain("recipeAuditFloor");
++    expect(EVO_SRC).toContain("opts.minSamples");
++    expect(EVO_SRC).toContain("opts.auditPassFloor");
++  });
+ });
+ 
+ /* ============================ C. 运行时快照与文本截断 ============================ */
+-- 
+2.54.0.windows.1
+

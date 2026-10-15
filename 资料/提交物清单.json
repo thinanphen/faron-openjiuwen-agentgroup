@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-15T23:22:57+08:00",
+  "_生成时间": "2026-10-15T23:29:55+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -18,7 +18,7 @@
   },
   "_统计": {
     "files": 93,
-    "bytes": 47009653
+    "bytes": 47010546
   },
   "files": [
     {
@@ -39,7 +39,7 @@
     {
       "path": "AI工作须知.md",
       "bytes": 15816,
-      "sha256": "B4940F16E06DD4B8179C9369D6873D62AE6C742A2A7C10C5BCADC5807474D92B"
+      "sha256": "8BCE51824619F4D6ED6E0EC7F8D61A44E17AB97A183C8E56D20C0406F19E7D0C"
     },
     {
       "path": "LICENSE",
@@ -49,7 +49,7 @@
     {
       "path": "README.md",
       "bytes": 24113,
-      "sha256": "1E43EF3A4EEC972DAEA0406644792B01AE50575F532F2E5E1A91C228A7AF4433"
+      "sha256": "6287481066447FDB778F11E8B78B95494CF310DD6968F6294CAB2D9C517F6264"
     },
     {
       "path": "conftest.py",
@@ -193,13 +193,13 @@
     },
     {
       "path": "任务台账.md",
-      "bytes": 17660,
-      "sha256": "14436C8573F922090037B7D4AEF5B56855551B67BA7DEA88311CA7CE6EC7A589"
+      "bytes": 18549,
+      "sha256": "3A99A86A519CC120EB74D83534BA3C8C222C44DE2C75E30459211E7EEB360369"
     },
     {
       "path": "接手必读.md",
       "bytes": 20351,
-      "sha256": "F1A3B4813D3BA92464EEC95859387D6D0EACF940B4F79D3E0391B9F57F274C5E"
+      "sha256": "CB0F80DE4E4C089AC1495385B33DD562FDEEAA304EEC0165AF33D28F3374DECB"
     },
     {
       "path": "提交包/01-作品名称.md",
@@ -218,8 +218,8 @@
     },
     {
       "path": "提交包/04-技术方案.md",
-      "bytes": 22243,
-      "sha256": "3F1EFFFBCAB51E668F8B25C0DD36EEBCB83DA182D6662142BD9CC14EDB69D9FD"
+      "bytes": 22247,
+      "sha256": "375B6B4C5521993693AAD03394755C073B7C70776464F7CE5778B9E012C95686"
     },
     {
       "path": "提交包/05-DEMO演示视频.md",

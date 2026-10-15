@@ -245,7 +245,7 @@ python skill/citation-audit/scripts/verify_no_deps.py   # 期望：exit=0
 ### `Legal-Workspace`（TypeScript / Rust）
 
 ```bash
-npm test              # 期望：74 passed (74)（evolution 41 + recipe 33）
+npm test              # 期望：75 passed (75)（evolution 41 + recipe 34）
 npm run build         # 期望：exit=0，80 modules
 cargo check           # 期望：exit=0（在 src-tauri 下）
 ```
@@ -309,7 +309,7 @@ cargo check           # 期望：exit=0（在 src-tauri 下）
 | 远端 HEAD | `0425763` + 本轮交接文档提交 |
 | 工作区 | 干净 |
 | Python 测试 | 31 + 9 + 6 = **46 组全绿** |
-| `Legal-Workspace` 测试 | **74 组全绿** |
+| `Legal-Workspace` 测试 | **75 组全绿** |
 | `Legal-Workspace` 远端 | 🔴 **落后 3 个提交**（推送被 403 拒，`thinanphen` 无 Write 权限） |
 | 硬性不合规 | ① DEMO 视频 432.5s（限 180s）② 提交包 657.4 MB（限 500 MB） |
 | 距截止 | **15 天**（2026-10-30，扣 2 天缓冲实际 13 天） |
@@ -319,6 +319,6 @@ cargo check           # 期望：exit=0（在 src-tauri 下）
 ## 九、如果你只想记一句话
 
 > **这个项目不缺想法，缺的是「把已做的做成可信证据」和「把硬性不合规项消掉」。**
-> 前者已有 46 + 74 组测试和可复现命令兜底；
+> 前者已有 46 + 75 组测试和可复现命令兜底；
 > 后者（**视频、体积、队名、模型 Key**）**只能由人做**。
 > **不要为了显得在干活而加新功能。**

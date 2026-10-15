@@ -401,9 +401,9 @@ git push
 | `verify_zero_dep.py`（检查项） | 6 |
 | **合计** | **46** |
 
-> **另有一侧**：`Legal-Workspace`（TypeScript）有 **74 组**（`vitest`），
-> 见该仓库 `tests/evolution.test.ts`（41）与 `tests/recipe.test.ts`（33）。
-> 两侧合计 **120 组**。
+> **另有一侧**：`Legal-Workspace`（TypeScript）有 **75 组**（`vitest`），
+> 见该仓库 `tests/evolution.test.ts`（41）与 `tests/recipe.test.ts`（34）。
+> 两侧合计 **121 组**。
 
 ---
 
