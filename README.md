@@ -301,12 +301,15 @@ faron-openjiuwen-agentgroup/
 │       ├── audit_citations.py     自包含 CLI（零三方依赖）
 │       └── verify_no_deps.py      零依赖自验证
 │
-├── 交付补丁/                       ★ Legal-Workspace 的 3 个提交补丁（D9：无 BOM）
+├── 交付补丁/                       ★ Legal-Workspace 的 4 个提交补丁（D9：无 BOM）
 │   ├── 0001-fix-P0-6-P0-7-UI.patch
 │   ├── 0002-test-EV7-evolution.ts-41-jsonBytes.patch
 │   ├── 0003-feat-EV2.patch
+│   ├── 0004-fix-R3-P1-2-P1-3-P1-4-vite-test-10s-JSX.patch
 │   ├── 改动概览.txt
 │   └── recipe.ts / recipe.test.ts / evolutionStore.ts / evolution.test.ts
+│
+│   └── 应用方式：for p in 交付补丁/*.patch; do git am "$p"; done
 │
 ├── 资料/                          ★ 参赛材料（提交包整理版）
 │   ├── README.md                  材料导航

@@ -1,0 +1,166 @@
+From 858593cee580ca4dc34bc50c7faee5d9639e0434 Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Thu, 15 Oct 2026 21:12:30 +0800
+Subject: [PATCH 4/4] =?utf-8?q?fix(R3-P1-2/P1-3/P1-4):=20=E4=BF=AE=20vite?=
+ =?utf-8?q?=20=E5=AE=9A=E6=97=B6=E5=99=A8=E6=B3=84=E6=BC=8F=EF=BC=88test?=
+ =?utf-8?q?=20=E7=9C=81=2010s=EF=BC=89+=20=E6=B3=A8=E9=87=8A=E5=9B=9E?=
+ =?utf-8?q?=E8=AF=BB=20+=20JSX=20=E8=A3=B8=E6=98=9F=E5=8F=B7?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+依据《04-新一轮迭代提示词.md》R3-P1-2 / P1-3 / P1-4。
+
+════ R3-P1-2 · npm test 干净退出 ════
+
+根因（独立复现）：vite.config.ts 的 ballBridgePlugin() 里
+
+    closeServer() { if (timer) clearInterval(timer); }
+
+**不是 Vite/Rollup 的任何钩子**，永远不被调用；而 configureServer 里
+setInterval(…, 1200) 的定时器因此泄漏。实测测试期确有副作用输出：
+
+    [ball-bridge] 监听 C:\Users\SoHa\AppData\Roaming\floating-ball\to-workbench.json
+    [ball-bridge] 控制端点 POST /__ball_cmd__ → 悬浮球进程
+
+修法两处：
+
+① configureServer **返回清理函数**（Vite 官方约定）；timer 改为局部 const
+
+② ⚠️ 报告建议的 `apply: 'serve'` **挡不住测试** —— 我先按建议加了它，
+   实测 `npm test` **仍然**打印那两行，因为 **vitest 的 command 也是 'serve'**。
+   改为额外判断运行环境：
+       const IS_VITEST = !!process.env.VITEST;
+       configureServer(server) { if (IS_VITEST) return; … }
+
+验收（全部实测）：
+
+    'close timed out'             1 → 0
+    'prevents Vite server'        1 → 0
+    npm test 总耗时               12.5s → 2.8s（省掉 10 秒）
+    测试期 ball-bridge 副作用日志   2 → 0
+    npm test 结果                 74 passed（未回归）
+    npm run dev                   悬浮球桥仍打印监听 2 行，server ready 507ms（未回归）
+    npm run build                 exit=0，副作用 0
+
+════ R3-P1-3 · evolutionStore.ts 文件头注释 ════
+
+常量第 39 行已是 `true`、常量上方注释也已改对，
+漏改的只有文件头第 11–14 行（仍写「尚未实现」「= false」）。
+已改为与常量一致的表述，并补上「并非全部派生字段都已接入」的边界说明。
+
+验收：前 20 行 grep `尚未实现|= false` → **0 命中**
+
+════ R3-P1-4 · JSX 裸星号 ════
+
+`Evolution.tsx` 原文：`当前**不会**改变文书生成行为。`
+JSX 文本节点里 `**` 不会被渲染成加粗，**用户会看到字面的 `**不会**`**。
+修为 `<strong>当前不会</strong>`。
+
+验收：`src/views` + `src/components` 下 grep `\*\*[^*]+\*\*` → **0 命中**
+
+════ 回归 ════
+    npm test        74 passed / 0 failed
+    npm run build   exit=0
+---
+ src/lib/evolutionStore.ts | 11 ++++++++---
+ src/views/Evolution.tsx   |  3 ++-
+ vite.config.ts            | 26 +++++++++++++++++++++-----
+ 3 files changed, 31 insertions(+), 9 deletions(-)
+
+diff --git a/src/lib/evolutionStore.ts b/src/lib/evolutionStore.ts
+index a5958aa..008ba4b 100644
+--- a/src/lib/evolutionStore.ts
++++ b/src/lib/evolutionStore.ts
+@@ -9,9 +9,14 @@
+ // 写入失败会**抛出**（用 invokeStrict），让 UI 能如实显示失败，而不是假装成功。
+ //
+ // ⚠️ 边界（如实说明）：本层保证「采纳动作被持久化」。
+-//    「配方被执行链路消费」（即行为真的随配方改变）是 EV2，**尚未实现**。
+-//    因此本模块导出的 `RECIPE_CONSUMED_BY_AGENT = false`，
+-//    UI 必须据此选择文案，不得宣称行为已改变。
++//    「配方被执行链路消费」（即行为真的随配方改变）是 EV2 —— **已落地**（见下）。
++//    ✅ 自 EV2 起 `RECIPE_CONSUMED_BY_AGENT = true`：
++//       `src/lib/recipe.ts` 的 `deriveParams()` 把配方折算成运行时参数，
++//       `src/lib/agent.ts` 在工具循环里真实读取（轮数上限 / 回填条数 / 检索词补充 / 弱化步骤）。
++//    ⚠️ 但**并非全部派生字段都已接入**：`recipe.ts` 的 `RECIPE_CONSUMPTION` 是逐字段
++//       事实清单（`auditPassFloor` / `minSamples` 仍为 `wired: false`），
++//       由 `unconsumedFields()` 如实报出。UI 若展示「配方已生效」，
++//       必须同时说明未接入的字段。
+ 
+ import { invokeStrict, isTauri } from "./tauri";
+ import type { RecipeManifest } from "./evolution";
+diff --git a/src/views/Evolution.tsx b/src/views/Evolution.tsx
+index 310cf4d..bfb2c9b 100644
+--- a/src/views/Evolution.tsx
++++ b/src/views/Evolution.tsx
+@@ -848,7 +848,8 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+                 ))}
+                 {unconsumedFields().length > 0 && (
+                   <li style={{ marginTop: 4 }}>
+-                    未接入的 {unconsumedFields().length} 项仅为派生值，当前**不会**改变文书生成行为。
++                    未接入的 {unconsumedFields().length} 项仅为派生值，
++                    <strong>当前不会</strong>改变文书生成行为。
+                   </li>
+                 )}
+               </ul>
+diff --git a/vite.config.ts b/vite.config.ts
+index c04e950..96c7006 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -48,21 +48,33 @@ function ensureBallRunning() {
+ 
+ // 纯 JS 桥接轮询插件
+ // 双向：读 to-workbench.json 推给浏览器；浏览器发命令 → Vite spawn 悬浮球 + 写控制文件
++//
++// ⚠️ 关于「什么时候才该真的跑」：
++//   本插件会 setInterval 轮询文件、并注册一个 POST 中间件 —— 这些只对 `vite dev` 有意义。
++//   但 vitest 也加载同一份配置，且**它的 `command` 同样是 `'serve'`**，
++//   所以 `apply: 'serve'` **挡不住测试期执行**（实测：加了之后 `configureServer` 照样跑）。
++//   因此额外用 VITEST 环境变量做判断，并在 configureServer 返回值里清理定时器
++//   （原实现写的 `closeServer()` 不是 Vite/Rollup 的任何钩子，永远不会被调用，
++//     定时器因此泄漏 —— 实测会把 vitest 吊住 10 秒并打 `close timed out`）。
++const IS_VITEST = !!process.env.VITEST;
++
+ function ballBridgePlugin(): Plugin {
+   const APPDATA = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+   const BRIDGE_FILE = path.join(APPDATA, "floating-ball", "to-workbench.json");
+   const CTRL_FILE = path.join(APPDATA, "floating-ball", "from-workbench.json");
+   let lastTs = 0;
+-  let timer: ReturnType<typeof setInterval> | null = null;
+ 
+   return {
+     name: "ball-bridge-poller",
+     configureServer(server) {
++      // 测试环境：直接不装任何副作用（不轮询、不注册中间件、不打印）
++      if (IS_VITEST) return;
++
+       console.log(`[ball-bridge] 监听 ${BRIDGE_FILE}`);
+       console.log(`[ball-bridge] 控制端点 POST /__ball_cmd__ → 悬浮球进程`);
+ 
+       // 1. floating-ball → 律政：轮询桥接文件推给浏览器
+-      timer = setInterval(() => {
++      const timer = setInterval(() => {
+         try {
+           if (!fs.existsSync(BRIDGE_FILE)) return;
+           const content = fs.readFileSync(BRIDGE_FILE, "utf8");
+@@ -106,9 +118,13 @@ function ballBridgePlugin(): Plugin {
+           res.end(JSON.stringify({ ok: false, error: String(e) }));
+         }
+       });
+-    },
+-    closeServer() {
+-      if (timer) clearInterval(timer);
++
++      // 返回清理函数：Vite 会在 dev server 关闭时调用它。
++      // 这是 Vite 官方约定的清理方式 —— 原来写的 `closeServer()` 不是 Vite/Rollup
++      // 的任何钩子，永远不会被调用，定时器因此泄漏（实测会把 vitest 吊住 10 秒）。
++      return () => {
++        clearInterval(timer);
++      };
+     },
+   };
+ }
+-- 
+2.54.0.windows.1
+
