@@ -1,0 +1,832 @@
+From 74b47062f70c58b447adb0cc9f791cece0171ebf Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Thu, 15 Oct 2026 22:22:43 +0800
+Subject: [PATCH 5/7] =?utf-8?q?feat(R4-P0-1/P0-2):=20=E6=92=A4=E4=B8=80?=
+ =?utf-8?q?=E7=BA=A7=E5=AF=BC=E8=88=AA=20+=20=E8=AE=BE=E7=BD=AE=E9=A1=B5?=
+ =?utf-8?q?=E3=80=8C=E6=95=B0=E6=8D=AE=E4=B8=8E=E9=9A=90=E7=A7=81=E3=80=8D?=
+ =?utf-8?q?=E5=8C=BA=E5=9D=97=EF=BC=88=E8=A7=A6=E7=82=B9=201=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+依据《05-新一轮迭代提示词.md》。隐式化第一步 + 底线项。
+
+════ R4-P0-1 · 撤一级导航（9 → 8 项）════
+
+| 文件 | 动作 |
+|---|---|
+| `src/nav.ts` | 删 `{ key: "evolution", … }`；删已成死代码的 `planned?: boolean` 字段 |
+| `src/components/Sidebar.tsx` | 删 `(item.planned ? " planned" : "")` 分支 |
+| `src/styles.css` | 删 `.nav-item.planned` 与 `.nav-item.planned .nav-dot` |
+| `src/App.tsx` | **保留** `/evolution` 深链 + 加注释说明理由 |
+
+**N2 的复核与两处补充（报告未提及）**：
+
+1. **行号有偏差**：报告写 `styles.css:219,223`，实际在 **183/187**。
+2. **`grep planned` 会大量误伤**：仓库里 `planned` 有**两个语义** ——
+   导航项的弱化标记（本次删的）与**任务状态** `"planned"`
+   （`agent.ts:41` 的 `TaskStatus`、`Agent.tsx` 七处、`planned: "已计划"` 文案）。
+   后者与隐式化**无关**，不能动。
+   → 因此我给出**精确口径**的验收（见 checker），而不是盲从 `grep -rn 'planned' src/`。
+3. **顺带发现 `.nav-flag` 也是死代码**：P0-6 拿掉角标后，
+   `styles.css` 里 `.nav-flag` 与 `.nav-item.active .nav-flag` 两条规则
+   **已无任何 JSX 使用**（全仓 grep `nav-flag` 仅命中 CSS 自身）。一并删除。
+
+**验收（精确口径，见下）**：
+```
+nav.ts 中「自我进化」                     0 命中 ✅
+nav.ts + Sidebar 中 item.planned           0 命中 ✅
+styles.css 中 .nav-item.planned            0 命中 ✅
+styles.css 中 nav-flag                     0 命中 ✅
+NAV_ITEMS 条目数                           9 → 8 ✅
+App.tsx 仍含 path="/evolution"              ✅ 深链保留
+```
+
+════ R4-P0-2 · 设置页「数据与隐私」区块（底线项）════
+
+**`src/lib/evolutionStore.ts` 新增**：
+
+- `PARTICIPATION_KEY = "evolution.participation"`
+- `type Participation = "unset" | "on" | "off"` + `isParticipating()`
+  —— **三态而非布尔**：这样「没选过」与「明确选了不参与」在数据上可区分，
+  UI 才能做到「首次询问」，而不是「假装用户选过了」。
+  **纪律 D13：只有明确 `on` 才算参与；读取失败一律按 `unset`（偏向不上行）。**
+- `loadParticipation()` / `setParticipation(v)`（写失败抛出，不假装成功）
+- `resetRecipe()` —— 回退到**基线**（`active_version = null`），
+  与既有 `rollbackRecipe()`（回退到**上一版**）语义区分，注释里写明。
+
+**新增 `src/components/RecipeParamsDetails.tsx`（共享组件）**：
+把 `Evolution.tsx` 里那段「配方参数接入情况」抽出来，**设置页与 /evolution 深链共用一份**。
+> 纪律 D11（搬移 ≠ 删改）：两处渲染同一份 `RECIPE_CONSUMPTION` 事实清单，
+> 才不会出现「一处说已接入、另一处说没有」的分裂。
+> `wired: false` 的两项**必须继续被如实报出**（纪律 D12）。
+
+**`src/views/Settings.tsx` 新增第 5 个 section**，插在「数据备份」之后：
+
+- 一行人话：「本机使用统计参与匿名聚合，用于改进默认工作流。」
+- 参与 / 不参与 —— **默认不参与**；`needsAsk` 时额外显示一条 `warn`
+  「你还没有选择过…在你选择之前，本机会按**不参与**处理」
+- 恢复默认（回到基线参数）
+- 隐私承诺：「只上行计数类字段，**不包含文书原文**」
+- `<details>` 折叠「查看已调整的参数」→ `RecipeParamsDetails`
+- 操作结果用**独立的** `recipeMsg`（与既有 `msg` 分开，避免互相覆盖）
+
+**新增 `src/hooks/useRecipeStatus.ts`（N3 要求）**：
+与 `useTodos` / `useDocuments` 同构（`useState` + `useEffect` + 清理），
+对外暴露 `{ available, activeVersion, participation, needsAsk, loading, resetRecipe, setParticipation, refresh }`。
+非 Tauri 环境 `available = false`，调用方整段不渲染。
+
+**顺带修一处会让状态过期的缺陷**：
+`evolutionStore` 原有 `adoptRecipe` / `rollbackRecipe` 写盘后**不发任何事件**，
+于是设置页与首页（后续的触点 2）要等整页刷新才更新 ——
+用户会看到「刚采纳了配方，首页却说没优化过」。
+参照 `useTodos` 的 `workbench:todos-changed` 模式，新增
+`EVT_RECIPE_CHANGED` 广播，并把 `persist()` 改为**写盘成功后**才广播
+（失败时广播会让其它页面读到未变更状态，反而混乱）。
+
+════ 新增精确验收脚本 `scripts/check-ui-copy.mjs` ════
+
+**为什么不用简单 grep**：
+1. 「裸星号」原 bug 是 **JSX 文本节点**里写 `**加粗**`（浏览器显示字面 `**`）；
+   而**代码注释**里的 `**` 根本不渲染。简单 grep 会误报，
+   逼人去改无害注释。脚本**先剔除注释**再判定。
+2. 「planned」的双语义问题（见上）。
+
+当前结果：**5 通过 / 1 未通过** —— 未通过的是 `Evolution.tsx` 的机制词，
+**正是 R4-P0-5 要做的搬迁**，属于预期内。
+
+════ 验证 ════
+  npm run build   exit=0（82 modules，较上轮 80 +2：RecipeParamsDetails + useRecipeStatus）
+  npm test        74 passed（未回归）
+  node scripts/check-ui-copy.mjs   5 通过 / 1 未通过（Evolution.tsx 机制词，待 R4-P0-5）
+
+════ 未做（本轮后续）════
+  R4-P0-3 触点 3（Agent 计划标注）· R4-P0-4 触点 2（首页状态行，hook 已备好）
+  R4-P0-5 Evolution.tsx 搬迁 · R4-P0-6 提交包对照表 · R4-P1-1~3 · R4-P2 · R4-P3
+---
+ scripts/check-ui-copy.mjs              | 166 +++++++++++++++++++++++++
+ src/App.tsx                            |   5 +
+ src/components/RecipeParamsDetails.tsx |  44 +++++++
+ src/components/Sidebar.tsx             |   4 +-
+ src/hooks/useRecipeStatus.ts           | 120 ++++++++++++++++++
+ src/lib/evolutionStore.ts              |  93 ++++++++++++++
+ src/nav.ts                             |   3 -
+ src/styles.css                         |  52 ++++----
+ src/views/Settings.tsx                 |  94 ++++++++++++++
+ 9 files changed, 550 insertions(+), 31 deletions(-)
+ create mode 100644 scripts/check-ui-copy.mjs
+ create mode 100644 src/components/RecipeParamsDetails.tsx
+ create mode 100644 src/hooks/useRecipeStatus.ts
+
+diff --git a/scripts/check-ui-copy.mjs b/scripts/check-ui-copy.mjs
+new file mode 100644
+index 0000000..5182f3c
+--- /dev/null
++++ b/scripts/check-ui-copy.mjs
+@@ -0,0 +1,166 @@
++// 前端 UI 文案与隐式化的**精确验收脚本**（供 CI / 人工一键复核）。
++//
++// 为什么不用简单 grep：
++//   1. 「裸星号」的原始 bug 是 **JSX 文本节点**里写 `**加粗**` ——
++//      它在浏览器里会显示成字面的 `**加粗**`。
++//      而**代码注释**（`// …` 与 `{/* … */}`）中的 `**` 根本不会渲染，
++//      简单 grep `\*\*[^*]+\*\*` 会产生误报，逼人去改无害注释。
++//   2. 「planned」这个词在本仓库有**两个语义**：
++//      导航项的弱化标记（已随隐式化删除）与**任务状态** `"planned"`（仍在用，无关）。
++//      简单 grep `planned` 会把后者全部误伤。
++//
++// 用法：node scripts/check-ui-copy.mjs
++// 退出码：0 = 全部通过；1 = 有未通过项
++
++import { readFileSync, readdirSync, statSync } from "node:fs";
++import { join, relative } from "node:path";
++import { fileURLToPath } from "node:url";
++import { dirname } from "node:path";
++
++const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
++const SRC = join(ROOT, "src");
++
++/** 递归收集指定扩展名的文件 */
++function walk(dir, exts, out = []) {
++  for (const name of readdirSync(dir)) {
++    const p = join(dir, name);
++    const st = statSync(p);
++    if (st.isDirectory()) walk(p, exts, out);
++    else if (exts.some((e) => name.endsWith(e))) out.push(p);
++  }
++  return out;
++}
++
++/** 去掉整行注释与块注释后的「有效代码行」 */
++function effectiveLines(text) {
++  const out = [];
++  let inBlock = false;
++  text.split(/\r?\n/).forEach((line, i) => {
++    let s = line;
++    if (inBlock) {
++      const end = s.indexOf("*/");
++      if (end === -1) return;
++      s = s.slice(end + 2);
++      inBlock = false;
++    }
++    // 去掉所有完整块注释
++    for (;;) {
++      const start = s.indexOf("/*");
++      if (start === -1) break;
++      const end = s.indexOf("*/", start + 2);
++      if (end === -1) {
++        s = s.slice(0, start);
++        inBlock = true;
++        break;
++      }
++      s = s.slice(0, start) + s.slice(end + 2);
++    }
++    const t = s.trim();
++    if (t.startsWith("//")) return;
++    if (!s.trim()) return;
++    out.push({ line: i + 1, text: s });
++  });
++  return out;
++}
++
++const results = [];
++function check(name, ok, detail) {
++  results.push({ name, ok, detail });
++}
++
++/* ---------- 1) JSX 文本节点里的裸 markdown 星号 ---------- */
++{
++  const files = walk(join(SRC, "views"), [".tsx"]).concat(
++    walk(join(SRC, "components"), [".tsx"]),
++  );
++  const hits = [];
++  for (const f of files) {
++    for (const { line, text } of effectiveLines(readFileSync(f, "utf8"))) {
++      if (/\*\*[^*\n]+\*\*/.test(text)) {
++        hits.push(`${relative(ROOT, f)}:${line}  ${text.trim()}`);
++      }
++    }
++  }
++  check(
++    "JSX 文本节点无裸 markdown 星号（排除注释）",
++    hits.length === 0,
++    hits.join("\n") || "0 命中",
++  );
++}
++
++/* ---------- 2) 导航项 planned 死代码已清 ---------- */
++{
++  const targets = [
++    join(SRC, "nav.ts"),
++    join(SRC, "components", "Sidebar.tsx"),
++    join(SRC, "styles.css"),
++  ];
++  const hits = [];
++  for (const f of targets) {
++    effectiveLines(readFileSync(f, "utf8")).forEach(({ line, text }) => {
++      // 只查「导航项弱化标记」语义，不误伤任务状态 "planned"
++      if (/\bitem\.planned\b/.test(text) || /\.nav-item\.planned\b/.test(text) || /\bnav-flag\b/.test(text)) {
++        hits.push(`${relative(ROOT, f)}:${line}  ${text.trim()}`);
++      }
++    });
++  }
++  check("导航 planned 死代码已清（item.planned / .nav-item.planned / .nav-flag）",
++    hits.length === 0, hits.join("\n") || "0 命中");
++}
++
++/* ---------- 3) nav.ts 不再出现「自我进化」 ---------- */
++{
++  const hits = [];
++  const f = join(SRC, "nav.ts");
++  readFileSync(f, "utf8").split(/\r?\n/).forEach((l, i) => {
++    if (l.includes("自我进化")) hits.push(`${relative(ROOT, f)}:${i + 1}  ${l.trim()}`);
++  });
++  check("nav.ts 不含「自我进化」（已从一级导航撤下）", hits.length === 0, hits.join("\n") || "0 命中");
++}
++
++/* ---------- 4) views/components 下机制词清零 ---------- */
++{
++  const MECH = /方案稿|docs\/12|未实现|纯仿真|差分隐私|K 匿名|加权平均|棱镜口径/;
++  const files = walk(join(SRC, "views"), [".tsx", ".ts"]).concat(
++    walk(join(SRC, "components"), [".tsx", ".ts"]),
++  );
++  const hits = [];
++  for (const f of files) {
++    effectiveLines(readFileSync(f, "utf8")).forEach(({ line, text }) => {
++      if (MECH.test(text)) hits.push(`${relative(ROOT, f)}:${line}  ${text.trim()}`);
++    });
++  }
++  check("views/components 下机制词清零（隐式化）", hits.length === 0, hits.join("\n") || "0 命中");
++}
++
++/* ---------- 5) 深链路由保留 ---------- */
++{
++  const app = readFileSync(join(SRC, "App.tsx"), "utf8");
++  check('深链 /evolution 路由保留', app.includes('path="/evolution"'),
++    app.includes('path="/evolution"') ? "已保留" : "缺失");
++}
++
++/* ---------- 6) 隐私开关默认不参与（三态） ---------- */
++{
++  const store = readFileSync(join(SRC, "lib", "evolutionStore.ts"), "utf8");
++  const hasKey = store.includes('"evolution.participation"');
++  const hasUnset = store.includes('"unset"') && store.includes("isParticipating");
++  check("参与意愿用三态（unset/on/off，默认不参与）", hasKey && hasUnset,
++    `key=${hasKey} 三态逻辑=${hasUnset}`);
++}
++
++/* ---------- 输出 ---------- */
++let failed = 0;
++console.log("=".repeat(74));
++console.log("前端 UI 文案与隐式化验收（精确口径）");
++console.log("=".repeat(74));
++for (const r of results) {
++  if (!r.ok) failed++;
++  console.log(`\n${r.ok ? "✅" : "❌"} ${r.name}`);
++  if (!r.ok) console.log(r.detail.split("\n").map((l) => "    " + l).join("\n"));
++  else if (r.detail !== "0 命中") console.log(`    ${r.detail}`);
++}
++console.log("\n" + "=".repeat(74));
++console.log(`结果：${results.length - failed} 通过 / ${failed} 未通过 / 共 ${results.length}`);
++console.log("=".repeat(74));
++process.exit(failed ? 1 : 0);
+diff --git a/src/App.tsx b/src/App.tsx
+index e22d36b..02ba44e 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -22,6 +22,11 @@ export default function App() {
+           <Route path="/law/:title" element={<LawBrowse />} />
+           <Route path="/templates" element={<Templates />} />
+           <Route path="/agent" element={<Agent />} />
++          {/* /evolution 是**深链**：不出现在左侧导航（见 nav.ts），
++              仅保留路由供答辩演示直达（#/evolution）。
++              把「自我进化」从一级导航撤下的理由见
++              docs/12-联邦配方进化方案.md 与《03-自我进化隐式化设计分析》：
++              用户需要的是「状态 + 控制」，机制本身该待在文档里。 */}
+           <Route path="/evolution" element={<Evolution />} />
+           <Route path="/translate" element={<Translate />} />
+           <Route path="/todo" element={<Todo />} />
+diff --git a/src/components/RecipeParamsDetails.tsx b/src/components/RecipeParamsDetails.tsx
+new file mode 100644
+index 0000000..f0d895f
+--- /dev/null
++++ b/src/components/RecipeParamsDetails.tsx
+@@ -0,0 +1,44 @@
++// 配方参数接入情况明细（**共享组件**）。
++//
++// 来源：`src/lib/recipe.ts` 的 `RECIPE_CONSUMPTION` —— 一张**逐字段的事实清单**，
++// 声明每个派生参数是否真的被执行链路读取，并由 `tests/recipe.test.ts` 的
++// 「登记表 ↔ 源码一致性」断言与 `agent.ts` 保持一致。
++//
++// 为什么抽成组件（而不是在两处各写一遍）：
++//   隐式化把这段从 `/evolution` 页「搬」到设置页的折叠区（纪律 D11：**搬移 ≠ 删改**），
++//   而 `/evolution` 深链仍要保留同样内容供答辩展示。
++//   两处渲染同一份事实清单，才不会出现「一处说已接入、另一处说没有」的分裂。
++//
++// ⚠️ 纪律 D12：`wired: false` 的字段**必须继续被如实报出**，
++//    不得因为「搬到折叠里了」就省掉这句话。
++
++import { RECIPE_CONSUMPTION, unconsumedFields } from "../lib/recipe";
++
++export default function RecipeParamsDetails() {
++  const all = Object.entries(RECIPE_CONSUMPTION);
++  const wiredCount = all.filter(([, info]) => info.wired).length;
++
++  return (
++    <details className="recipe-params">
++      <summary>
++        查看已调整的参数（执行链路接入 {wiredCount}/{all.length}）
++      </summary>
++      <ul>
++        {all.map(([field, info]) => (
++          <li key={field}>
++            <code>{field}</code>
++            {" — "}
++            {info.wired ? "✓ 已接入执行链路" : "○ 尚未接入"}
++            {info.note ? `：${info.note}` : ""}
++          </li>
++        ))}
++        {unconsumedFields().length > 0 && (
++          <li className="recipe-params-warn">
++            未接入的 {unconsumedFields().length} 项仅为派生值，
++            <strong>当前不会</strong>改变文书生成行为。
++          </li>
++        )}
++      </ul>
++    </details>
++  );
++}
+diff --git a/src/components/Sidebar.tsx b/src/components/Sidebar.tsx
+index 28852aa..717a83e 100644
+--- a/src/components/Sidebar.tsx
++++ b/src/components/Sidebar.tsx
+@@ -17,9 +17,7 @@ export default function Sidebar() {
+           <NavLink
+             key={item.key}
+             to={item.path}
+-            className={({ isActive }) =>
+-              "nav-item" + (isActive ? " active" : "") + (item.planned ? " planned" : "")
+-            }
++            className={({ isActive }) => "nav-item" + (isActive ? " active" : "")}
+           >
+             <span className="nav-dot" />
+             <span className="nav-label">{item.label}</span>
+diff --git a/src/hooks/useRecipeStatus.ts b/src/hooks/useRecipeStatus.ts
+new file mode 100644
+index 0000000..0c0c3f7
+--- /dev/null
++++ b/src/hooks/useRecipeStatus.ts
+@@ -0,0 +1,120 @@
++// 配方状态数据层（R4-P0-4 触点 2 · 与 useTodos / useDocuments 同构）。
++//
++// 为什么要单独一个 hook 而不是在 Home.tsx 里直接调 loadRecipeState()：
++//   1. 与现有模式一致 —— Home 的其它数据都走 hook（useTodos / useDocuments）
++//   2. **浏览器预览环境（非 Tauri）必须有 available 判定**，
++//      否则首页会尝试渲染一个本机根本没有的状态
++//
++// ⚠️ 纪律 D12：**无数据不得渲染状态**。
++//    本 hook 把「不可用」与「未采纳过配方」都如实报出，
++//    由调用方决定不渲染 —— 不得用占位文案撑场面。
++
++import { useCallback, useEffect, useState } from "react";
++
++import {
++  EVT_RECIPE_CHANGED,
++  activeVersion,
++  loadParticipation,
++  loadRecipeState,
++  resetRecipe as resetRecipeStore,
++  setParticipation as setParticipationStore,
++  type Participation,
++  type RecipeVersion,
++} from "../lib/evolutionStore";
++
++export interface RecipeStatus {
++  /** 是否处于可读取环境（Tauri）且读取成功 */
++  available: boolean;
++  /** 当前生效的配方版本；`null` = 未采纳过任何配方（**不应渲染状态行**） */
++  activeVersion: RecipeVersion | null;
++  /** 参与意愿（三态） */
++  participation: Participation;
++  /** 参与意愿是否尚未选择过（true → 需要「首次使用时询问」） */
++  needsAsk: boolean;
++  loading: boolean;
++  /** 恢复默认：把配方回退到基线 */
++  resetRecipe: () => Promise<void>;
++  /** 设置参与意愿 */
++  setParticipation: (v: "on" | "off") => Promise<void>;
++  /** 手动重新读取 */
++  refresh: () => Promise<void>;
++}
++
++/**
++ * 读取本机配方状态与参与意愿。
++ *
++ * 非 Tauri 环境（浏览器预览）：`available = false`，调用方应整段不渲染。
++ * 读取失败：同样 `available = false` —— **失败时偏向不展示，而不是展示占位**。
++ */
++export function useRecipeStatus(): RecipeStatus {
++  const [available, setAvailable] = useState(false);
++  const [ver, setVer] = useState<RecipeVersion | null>(null);
++  const [participation, setPart] = useState<Participation>("unset");
++  const [loading, setLoading] = useState(true);
++
++  const refresh = useCallback(async () => {
++    const [{ state, available: ok }, p] = await Promise.all([
++      loadRecipeState(),
++      loadParticipation(),
++    ]);
++    setAvailable(ok);
++    setVer(ok ? activeVersion(state) : null);
++    setPart(p);
++    setLoading(false);
++  }, []);
++
++  useEffect(() => {
++    let alive = true;
++    (async () => {
++      const [{ state, available: ok }, p] = await Promise.all([
++        loadRecipeState(),
++        loadParticipation(),
++      ]);
++      if (!alive) return;
++      setAvailable(ok);
++      setVer(ok ? activeVersion(state) : null);
++      setPart(p);
++      setLoading(false);
++    })();
++    return () => {
++      alive = false;
++    };
++  }, []);
++
++  // 采纳 / 回滚 / 恢复默认 / 参与意愿变化后重新对齐，
++  // 避免「刚采纳了配方，首页却说没优化过」这类过期显示。
++  useEffect(() => {
++    const sync = () => {
++      void refresh();
++    };
++    window.addEventListener(EVT_RECIPE_CHANGED, sync);
++    return () => {
++      window.removeEventListener(EVT_RECIPE_CHANGED, sync);
++    };
++  }, [refresh]);
++
++  const resetRecipe = useCallback(async () => {
++    await resetRecipeStore();
++    await refresh();
++  }, [refresh]);
++
++  const setParticipation = useCallback(
++    async (v: "on" | "off") => {
++      await setParticipationStore(v);
++      await refresh();
++    },
++    [refresh],
++  );
++
++  return {
++    available,
++    activeVersion: ver,
++    participation,
++    // 只有「从未选择过」才需要询问；明确选过 off 就不再问
++    needsAsk: participation === "unset",
++    loading,
++    resetRecipe,
++    setParticipation,
++    refresh,
++  };
++}
+diff --git a/src/lib/evolutionStore.ts b/src/lib/evolutionStore.ts
+index 008ba4b..1f972a0 100644
+--- a/src/lib/evolutionStore.ts
++++ b/src/lib/evolutionStore.ts
+@@ -24,6 +24,24 @@ import type { RecipeManifest } from "./evolution";
+ /** 配方状态在 `settings` 表中的键 */
+ export const RECIPE_STATE_KEY = "evolution.recipe_state";
+ 
++/**
++ * 配方变更广播（与 `useTodos` 的 `workbench:todos-changed` 同构）。
++ *
++ * 为什么需要：采纳 / 回滚 / 恢复默认 之后，**首页状态行**与**设置页折叠明细**
++ * 都是各自持有状态的实例。没有广播，它们要等整页刷新才会更新 ——
++ * 用户会看到「刚采纳了配方，首页却说没优化过」这类过期数据。
++ */
++export const EVT_RECIPE_CHANGED = "workbench:recipe-changed";
++
++/** 广播一次配方变更（内部使用，也供测试触发） */
++export function notifyRecipeChanged(): void {
++  try {
++    window.dispatchEvent(new Event(EVT_RECIPE_CHANGED));
++  } catch {
++    /* 非浏览器环境忽略 */
++  }
++}
++
+ /**
+  * 配方是否已被**执行链路**消费（EV2）。
+  *
+@@ -96,6 +114,8 @@ async function persist(state: RecipeState): Promise<void> {
+     key: RECIPE_STATE_KEY,
+     value: JSON.stringify(state),
+   });
++  // 写盘成功后才广播 —— 失败时广播会让其它页面读到未变更的状态，反而混乱
++  notifyRecipeChanged();
+ }
+ 
+ /** 历史最多保留的版本数（超出丢弃最旧的） */
+@@ -147,3 +167,76 @@ export function activeVersion(state: RecipeState): RecipeVersion | null {
+   if (state.active_version === null) return null;
+   return state.history.find((h) => h.version === state.active_version) ?? null;
+ }
++
++/* ======================================================================
++ * 参与意愿（R4-P0-2 触点 1 的底线项）
++ * ----------------------------------------------------------------------
++ * 本模块会涉及**本机使用统计的上行**（哪怕是加噪后的计数），
++ * 用户的**参与 / 退出权**不能只写在文档里 —— 那是「告知」，不是「可行使」。
++ * 所以设置页必须有一个**可点的、能持久化的**开关。
++ *
++ * 纪律 D13：**默认不参与**；首次使用时主动询问。
++ * 实现方式用三态而非布尔：
++ *   "unset" = 尚未选择 → 视为**不参与**，并需要向用户询问
++ *   "on"    = 明确参与
++ *   "off"   = 明确不参与
++ * 这样「没选过」与「明确选了不参与」在数据上可区分，
++ * UI 才能做到「首次询问」而不是「假装用户选过了」。
++ * ==================================================================== */
++
++/** 参与意愿在 `settings` 表中的键 */
++export const PARTICIPATION_KEY = "evolution.participation";
++
++/** 参与意愿三态；`unset` 在行为上等价于不参与，但需要询问 */
++export type Participation = "unset" | "on" | "off";
++
++/** 是否在**行为上**视为参与（只有明确 `on` 才算） */
++export function isParticipating(p: Participation): boolean {
++  return p === "on";
++}
++
++/**
++ * 读取参与意愿。
++ *
++ * - 非 Tauri 环境 → `"unset"`（不会误判为已参与）
++ * - 未设置 / 值非法 / 读取失败 → 一律 `"unset"`（**失败时偏向不参与**）
++ */
++export async function loadParticipation(): Promise<Participation> {
++  if (!isTauri()) return "unset";
++  try {
++    const raw = await invokeStrict<string | null>("settings_get", { key: PARTICIPATION_KEY });
++    if (raw === "on" || raw === "off") return raw;
++    return "unset";
++  } catch (e) {
++    // 读不到就当作未选择（不参与），绝不默认上行
++    console.error("[evolution] 读取参与意愿失败，按「未选择」处理：", e);
++    return "unset";
++  }
++}
++
++/**
++ * 写入参与意愿（`on` / `off`）。
++ *
++ * @throws 写入失败时抛出 —— 调用方必须如实显示失败，不得假装已生效
++ */
++export async function setParticipation(v: "on" | "off"): Promise<void> {
++  await invokeStrict<void>("settings_set", { key: PARTICIPATION_KEY, value: v });
++  // 参与意愿变化也会影响设置页/首页的呈现，一并广播
++  notifyRecipeChanged();
++}
++
++/**
++ * **恢复默认**：把配方回退到基线（清空 `active_version`），并保留历史以便追溯。
++ *
++ * 注意与 `rollbackRecipe()` 的区别：
++ *   - `rollbackRecipe()` 回退到**上一版**（历史里的前一版）
++ *   - `resetRecipe()`    回退到**基线**（`active_version = null`，即不使用任何配方）
++ *
++ * @throws 写入失败时抛出
++ */
++export async function resetRecipe(): Promise<RecipeState> {
++  const { state } = await loadRecipeState();
++  const next: RecipeState = { history: state.history, active_version: null };
++  await persist(next);
++  return next;
++}
+diff --git a/src/nav.ts b/src/nav.ts
+index 1028fa5..6130fc7 100644
+--- a/src/nav.ts
++++ b/src/nav.ts
+@@ -5,8 +5,6 @@ export interface NavItem {
+   key: string;
+   label: string;
+   path: string;
+-  /** 尚未对用户开放的页面：侧栏以弱化样式提示，避免被当成已落地功能 */
+-  planned?: boolean;
+ }
+ 
+ export const NAV_ITEMS: NavItem[] = [
+@@ -14,7 +12,6 @@ export const NAV_ITEMS: NavItem[] = [
+   { key: "laws", label: "法规查询", path: "/laws" },
+   { key: "templates", label: "模板库", path: "/templates" },
+   { key: "agent", label: "文书智能体", path: "/agent" },
+-  { key: "evolution", label: "自我进化", path: "/evolution" },
+   { key: "translate", label: "翻译", path: "/translate" },
+   { key: "todo", label: "待办提醒", path: "/todo" },
+   { key: "settings", label: "数据设置", path: "/settings" },
+diff --git a/src/styles.css b/src/styles.css
+index 1157874..b99c84c 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -215,31 +215,6 @@ body {
+   opacity: 1;
+ }
+ 
+-/* 方案稿页面（0.8.0 规划）：侧栏弱化 + 角标提示，避免被当成已落地功能 */
+-.nav-item.planned {
+-  opacity: 0.82;
+-}
+-
+-.nav-item.planned .nav-dot {
+-  border-radius: 2px;
+-}
+-
+-.nav-flag {
+-  padding: 1px 6px;
+-  border-radius: 999px;
+-  border: 1px dashed var(--border);
+-  color: var(--text-muted);
+-  font-size: 10px;
+-  font-weight: 500;
+-  letter-spacing: 0.5px;
+-  white-space: nowrap;
+-}
+-
+-.nav-item.active .nav-flag {
+-  border-color: var(--brand);
+-  color: var(--brand-text);
+-}
+-
+ .sidebar-foot {
+   padding: 14px 16px;
+   font-size: 12px;
+@@ -737,6 +712,33 @@ button.primary.danger:hover {
+   border: 1px solid var(--danger-border);
+ }
+ 
++/* 配方参数接入明细（设置页折叠区 与 /evolution 深链 共用一份） */
++.recipe-params {
++  margin-top: 10px;
++  font-size: 12px;
++  color: var(--text-muted);
++}
++
++.recipe-params > summary {
++  cursor: pointer;
++  user-select: none;
++}
++
++.recipe-params > ul {
++  margin: 6px 0 0 18px;
++  padding: 0;
++  line-height: 1.7;
++}
++
++.recipe-params code {
++  font-size: 11.5px;
++}
++
++/* 未接入项如实提示：这是诚实性落点，不要弱化 */
++.recipe-params-warn {
++  margin-top: 4px;
++}
++
+ /* ---------- 翻译 ---------- */
+ .translate-page {
+   display: flex;
+diff --git a/src/views/Settings.tsx b/src/views/Settings.tsx
+index c166030..acc306d 100644
+--- a/src/views/Settings.tsx
++++ b/src/views/Settings.tsx
+@@ -1,10 +1,39 @@
+ import { useState } from "react";
+ import { useSettings } from "../hooks/useSettings";
++import { useRecipeStatus } from "../hooks/useRecipeStatus";
++import RecipeParamsDetails from "../components/RecipeParamsDetails";
+ 
+ export default function Settings() {
+   const { s, setAI, setBackup, setDefaultPopup, backupNow, restore, msg, setMsg } = useSettings();
+   const [backupDir, setBackupDir] = useState("");
+   const [restoreFile, setRestoreFile] = useState("");
++  const recipe = useRecipeStatus();
++  const [recipeMsg, setRecipeMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
++  const [busy, setBusy] = useState(false);
++
++  const onSetParticipation = async (v: "on" | "off") => {
++    setBusy(true);
++    try {
++      await recipe.setParticipation(v);
++      setRecipeMsg({ type: "ok", text: v === "on" ? "已选择参与匿名聚合。" : "已选择不参与。" });
++    } catch (e) {
++      setRecipeMsg({ type: "err", text: `保存失败：${e instanceof Error ? e.message : String(e)}` });
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const onResetRecipe = async () => {
++    setBusy(true);
++    try {
++      await recipe.resetRecipe();
++      setRecipeMsg({ type: "ok", text: "已恢复默认：编排参数回到基线。" });
++    } catch (e) {
++      setRecipeMsg({ type: "err", text: `恢复失败：${e instanceof Error ? e.message : String(e)}` });
++    } finally {
++      setBusy(false);
++    }
++  };
+ 
+   return (
+     <div className="settings-page">
+@@ -130,6 +159,64 @@ export default function Settings() {
+         <p className="muted hint">还原会用备份文件覆盖当前数据库，操作前请先手动备份一次。</p>
+       </section>
+ 
++      {/* 数据与隐私（隐式化触点 1 —— 隐私参与权的落点，底线项）
++          ⚠️ 纪律 D13：开关默认**不参与**；从未选择过（unset）时主动询问，不得默认勾选。 */}
++      {recipe.available && (
++        <section className="card">
++          <h3>数据与隐私</h3>
++          <p className="muted hint">
++            本机使用统计参与匿名聚合，用于改进默认工作流。
++          </p>
++
++          {recipe.needsAsk && (
++            <p className="warn">
++              你还没有选择过是否参与匿名聚合。在你选择之前，本机会按<strong>不参与</strong>处理。
++            </p>
++          )}
++
++          <label className="toggle-row">
++            <input
++              type="radio"
++              name="participation"
++              checked={recipe.participation === "on"}
++              disabled={busy}
++              onChange={() => void onSetParticipation("on")}
++            />
++            <span>参与：允许上行<strong>计数类</strong>字段，用于改进默认工作流</span>
++          </label>
++          <label className="toggle-row">
++            <input
++              type="radio"
++              name="participation"
++              checked={recipe.participation !== "on"}
++              disabled={busy}
++              onChange={() => void onSetParticipation("off")}
++            />
++            <span>不参与（默认）</span>
++          </label>
++
++          <p className="muted hint">
++            隐私承诺：只上行计数类字段，<strong>不包含文书原文</strong>。所有文书与任务数据始终留在本机。
++          </p>
++
++          <h4 className="sub-title">编排参数</h4>
++          {recipe.activeVersion ? (
++            <p className="muted hint">
++              当前生效版本：v{recipe.activeVersion.version}
++              （指纹 <code>{recipe.activeVersion.signature.slice(0, 12)}…</code>，
++              采纳于 {new Date(recipe.activeVersion.adopted_at).toLocaleString()}）
++            </p>
++          ) : (
++            <p className="muted hint">当前未采纳任何编排配方，全部参数为基线值。</p>
++          )}
++          <button className="primary" disabled={busy || !recipe.activeVersion} onClick={() => void onResetRecipe()}>
++            恢复默认（回到基线参数）
++          </button>
++
++          <RecipeParamsDetails />
++        </section>
++      )}
++
+       {/* 偏好设置 */}
+       <section className="card">
+         <h3>其它偏好</h3>
+@@ -149,6 +236,13 @@ export default function Settings() {
+           {msg.text}
+         </div>
+       )}
++
++      {/* 隐私/配方操作结果提示（与上方 msg 分开，避免互相覆盖） */}
++      {recipeMsg && (
++        <div className={`settings-msg ${recipeMsg.type}`} onClick={() => setRecipeMsg(null)}>
++          {recipeMsg.text}
++        </div>
++      )}
+     </div>
+   );
+ }
+\ No newline at end of file
+-- 
+2.54.0.windows.1
+

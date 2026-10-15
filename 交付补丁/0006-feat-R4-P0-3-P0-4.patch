@@ -1,0 +1,184 @@
+From 07e1d69582308f9f5cabeb72d2d73970d506978f Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Thu, 15 Oct 2026 22:25:20 +0800
+Subject: [PATCH 6/7] =?utf-8?q?feat(R4-P0-3/P0-4):=20=E4=B8=89=E5=A4=84?=
+ =?utf-8?q?=E9=9A=90=E5=BC=8F=E8=A7=A6=E7=82=B9=E5=85=A8=E9=83=A8=E8=90=BD?=
+ =?utf-8?q?=E5=9C=B0=EF=BC=88=E8=AE=BE=E7=BD=AE=E9=A1=B5=E6=8E=A7=E5=88=B6?=
+ =?utf-8?q?=E6=9D=83=20+=20=E8=AE=A1=E5=88=92=E5=8D=A1=E4=BA=BA=E8=AF=9D?=
+ =?utf-8?q?=20+=20=E9=A6=96=E9=A1=B5=E7=8A=B6=E6=80=81=E8=A1=8C=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+依据《05-新一轮迭代提示词.md》R4-P0-3 / R4-P0-4，以及 N1 / N3 两条前置条件。
+
+════ R4-P0-3 · 触点 3：文书智能体页计划卡内一句人话标注（全案关键）════
+
+**N1 的前置条件核实通过**：
+  - Agent.tsx:16 确实已 import refreshRuntimeRecipe（本轮补上 getRuntimeRecipeParams）
+  - AgentStep 确实**没有** deprioritized 字段（只有 seq/name/tool/role/params/
+    need_confirm/confirmed/prompt/status/result_ref/started_at/updated_at）
+  - 弱化确实在**提示词层**做（planFromSkeleton 把命中步骤移到末尾 + prompt 标注）
+  → 所以必须回头读运行时参数，正如 N1 所判断
+
+**实现**：计划卡标题后插入一段 IIFE 渲染，逻辑三重收窄：
+  ① rp.deprioritizedSteps 为空 → 返回 null（**整句不渲染** · 纪律 D12）
+  ② 只列**真正出现在本张计划卡里**的步骤（用与 isDeprioritized 相同的包含匹配）
+     —— 避免显示与本任务无关的弱化项
+  ③ 收窄后为空 → 仍返回 null
+
+文案：「已按你的习惯，把「X」降为可选（来自本机已采纳的编排配方）」
+
+════ R4-P0-4 · 触点 2：首页一行状态 ════
+
+**N3 的要求照做**：新增 src/hooks/useRecipeStatus.ts（已在上一提交建立，与
+useTodos / useDocuments 同构：useState + useEffect + 清理 + 变更事件订阅）。
+Home.tsx 只加一行调用，在 .home-welcome 之后插入。
+
+**空值门**：ecipe.available && recipe.activeVersion !== null 才渲染。
+非 Tauri（浏览器预览）与「未采纳过配方」两种情况下**整行不出现**。
+
+文案：「已根据你最近 N 次任务优化默认流程（本机保留 vN，可在「数据设置 → 数据与隐私」恢复默认）」
+
+════ 样式 ════
+新增 .agent-recipe-note 与 .home-recipe-status（含 -sub 次要文字），
+沿用既有 --surface-2 / --border 令牌，亮暗双主题一致。
+
+════ 验证 ════
+  npm run build   exit=0（82 modules）
+  npm test        74 passed / 0 failed
+  Home.tsx 含 useRecipeStatus 2 处、空值门 1 处
+  Agent.tsx 触点 3 空值门 1 处
+  node scripts/check-ui-copy.mjs   5 通过 / 1 未通过（余下的是 Evolution.tsx 机制词，待 R4-P0-5）
+---
+ src/styles.css      | 34 ++++++++++++++++++++++++++++++++++
+ src/views/Agent.tsx | 24 ++++++++++++++++++++++++
+ src/views/Home.tsx  | 13 +++++++++++++
+ 3 files changed, 71 insertions(+)
+
+diff --git a/src/styles.css b/src/styles.css
+index b99c84c..852c778 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -739,6 +739,40 @@ button.primary.danger:hover {
+   margin-top: 4px;
+ }
+ 
++/* 触点 3：文书智能体页计划卡里的那句人话标注（R4-P0-3）
++   只在「本机已采纳配方且本计划确有被弱化步骤」时渲染 —— 见 Agent.tsx 的空值门。 */
++.agent-recipe-note {
++  margin: 8px 0 0;
++  padding: 8px 12px;
++  border-radius: 8px;
++  background: var(--surface-2, #f5f6f8);
++  border: 1px solid var(--border);
++  font-size: 12.5px;
++  line-height: 1.7;
++}
++
++.agent-recipe-note-sub {
++  color: var(--text-muted);
++  font-size: 11.5px;
++}
++
++/* 触点 2：首页一行状态（R4-P0-4）
++   只在「可读 + 已采纳配方」时由 Home.tsx 渲染 —— 见那里的空值门（纪律 D12）。 */
++.home-recipe-status {
++  margin: 10px 0 0;
++  padding: 8px 12px;
++  border-radius: 8px;
++  background: var(--surface-2, #f5f6f8);
++  border: 1px solid var(--border);
++  font-size: 12.5px;
++  line-height: 1.7;
++}
++
++.home-recipe-status-sub {
++  color: var(--text-muted);
++  font-size: 11.5px;
++}
++
+ /* ---------- 翻译 ---------- */
+ .translate-page {
+   display: flex;
+diff --git a/src/views/Agent.tsx b/src/views/Agent.tsx
+index 4aca0c0..85e31e7 100644
+--- a/src/views/Agent.tsx
++++ b/src/views/Agent.tsx
+@@ -14,6 +14,7 @@ import {
+   rememberTask,
+   makeRunner,
+   refreshRuntimeRecipe,
++  getRuntimeRecipeParams,
+ } from "../lib/agent";
+ import { useSettings } from "../hooks/useSettings";
+ import { useDocuments } from "../hooks/useDocuments";
+@@ -1004,6 +1005,29 @@ export default function Agent() {
+             </div>
+           </div>
+ 
++          {/* 触点 3（隐式化 · R4-P0-3）：把「它在适应我」翻译成人话。
++              背景（N1）：弱化是在**提示词层**做的（planFromSkeleton 把命中步骤移到末尾
++              并在 prompt 标注），`AgentStep` 里**没有** deprioritized 字段 ——
++              所以这里必须回头读运行时参数，而不是读步骤本身。
++              ⚠️ 纪律 D12：`deprioritizedSteps` 为空 → **整句不渲染**（不得虚报）。 */}
++          {(() => {
++            const rp = getRuntimeRecipeParams();
++            if (rp.deprioritizedSteps.length === 0) return null;
++            // 只列真正出现在本张计划卡里的步骤（避免显示与本任务无关的弱化项）
++            const hit = task.steps
++              .map((st) => st.name)
++              .filter((name) =>
++                rp.deprioritizedSteps.some((d) => name.toLowerCase().includes(d.toLowerCase())),
++              );
++            if (hit.length === 0) return null;
++            return (
++              <p className="agent-recipe-note">
++                已按你的习惯，把「{hit.join("」「")}」降为可选
++                <span className="agent-recipe-note-sub">（来自本机已采纳的编排配方）</span>
++              </p>
++            );
++          })()}
++
+           {/* 多智能体/工具接力链可视化（P3） */}
+           <div className="agent-relay" title="按执行顺序展示各角色/工具的接力过程">
+             {task.steps.map((st, i) => (
+diff --git a/src/views/Home.tsx b/src/views/Home.tsx
+index b4313c3..8c5cbd4 100644
+--- a/src/views/Home.tsx
++++ b/src/views/Home.tsx
+@@ -3,11 +3,13 @@ import { Link } from "react-router-dom";
+ import { NAV_ITEMS } from "../nav";
+ import { Todo, useTodos } from "../hooks/useTodos";
+ import { useDocuments } from "../hooks/useDocuments";
++import { useRecipeStatus } from "../hooks/useRecipeStatus";
+ import { openPathFile } from "../lib/open";
+ 
+ export default function Home() {
+   const { todos, toggle, refresh } = useTodos();
+   const { docs, remove: removeDoc } = useDocuments();
++  const recipe = useRecipeStatus();
+ 
+   /** 勾选首页待办：写库失败时给出可见提示（完成后统计立即归零） */
+   async function handleToggle(id: number, done: boolean) {
+@@ -44,6 +46,17 @@ export default function Home() {
+         <span className="muted">{todayStr()}</span>
+       </div>
+ 
++      {/* 触点 2（隐式化 · R4-P0-4）：一行状态，只在**真的**调整过时出现。
++          ⚠️ 纪律 D12：无数据 / 未采纳配方 → 整行不渲染，不得用占位文案撑场面。 */}
++      {recipe.available && recipe.activeVersion !== null && (
++        <p className="home-recipe-status">
++          已根据你最近 {recipe.activeVersion.version} 次任务优化默认流程
++          <span className="home-recipe-status-sub">
++            （本机保留 v{recipe.activeVersion.version}，可在「数据设置 → 数据与隐私」恢复默认）
++          </span>
++        </p>
++      )}
++
+       {/* 超期横幅 */}
+       {overdue.length > 0 && (
+         <div className="overdue-banner">
+-- 
+2.54.0.windows.1
+

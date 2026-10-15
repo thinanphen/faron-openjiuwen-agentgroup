@@ -1,14 +1,23 @@
- package-lock.json          | 405 ++++++++++++++++++++++++++++++++++++++++++++-
- package.json               |   5 +-
- src/components/Sidebar.tsx |   2 -
- src/lib/agent.ts           | 112 ++++++++++++-
- src/lib/evolution.ts       |  17 +-
- src/lib/evolutionStore.ts  | 149 +++++++++++++++++
- src/lib/recipe.ts          | 198 ++++++++++++++++++++++
- src/nav.ts                 |   6 +-
- src/views/Agent.tsx        |   5 +
- src/views/Evolution.tsx    | 108 +++++++++---
- tests/evolution.test.ts    | 344 ++++++++++++++++++++++++++++++++++++++
- tests/recipe.test.ts       | 301 +++++++++++++++++++++++++++++++++
- vite.config.ts             |  26 ++-
- 13 files changed, 1638 insertions(+), 40 deletions(-)
+ package-lock.json                      | 405 +++++++++++++-
+ package.json                           |   5 +-
+ scripts/check-ui-copy.mjs              | 166 ++++++
+ src/App.tsx                            |   5 +
+ src/components/RecipeParamsDetails.tsx |  44 ++
+ src/components/Sidebar.tsx             |   6 +-
+ src/evolution-lab/Evolution.css        | 629 ++++++++++++++++++++++
+ src/evolution-lab/EvolutionLab.tsx     | 926 +++++++++++++++++++++++++++++++++
+ src/hooks/useRecipeStatus.ts           | 120 +++++
+ src/lib/agent.ts                       | 112 +++-
+ src/lib/evolution.ts                   |  17 +-
+ src/lib/evolutionStore.ts              | 242 +++++++++
+ src/lib/recipe.ts                      | 198 +++++++
+ src/nav.ts                             |   5 +-
+ src/styles.css                         |  93 +++-
+ src/views/Agent.tsx                    |  29 ++
+ src/views/Evolution.tsx                | 925 +++-----------------------------
+ src/views/Home.tsx                     |  13 +
+ src/views/Settings.tsx                 |  94 ++++
+ tests/evolution.test.ts                | 344 ++++++++++++
+ tests/recipe.test.ts                   | 301 +++++++++++
+ vite.config.ts                         |  26 +-
+ 22 files changed, 3809 insertions(+), 896 deletions(-)
