@@ -76,7 +76,7 @@ pip install opentelemetry-exporter-otlp-proto-http opentelemetry-exporter-otlp-p
 
 cd faron-openjiuwen-agentgroup
 python probe_build.py                 # spec 可被官方框架构建
-python tests/test_citation_audit.py   # 24 组向量（含★反例点名）
+python tests/test_citation_audit.py   # 31 组向量（含★反例点名）
 python run_offline_demo.py            # 端到端出 .docx，不需要模型
 ```
 
@@ -183,7 +183,9 @@ token 去重
 │   ├── config.py              模型池 / 5 类任务 / 四角色提示词
 │   └── group.py               ★ Agent Group 规格装配 + 门面
 ├── tests/
-│   └── test_citation_audit.py 24 组向量（对齐官方 + 反例 + 图谱）
+│   ├── test_citation_audit.py 31 组向量（对齐官方 + 反例 + 图谱）
+│   ├── test_assembly.py       9 组装配防线（E1 回归）
+│   └── verify_zero_dep.py     零依赖验证（屏蔽全部框架 import）
 ├── probe_build.py             最小构建探针
 ├── run_offline_demo.py        端到端演示（不需要模型）
 ├── run_online.py              在线运行（需要模型）

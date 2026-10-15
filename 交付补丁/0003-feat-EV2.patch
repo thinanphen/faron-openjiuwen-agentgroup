@@ -1,0 +1,927 @@
+From a2e0564d9901691f65038b9366c2c0ac103e9ed3 Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Thu, 15 Oct 2026 15:32:47 +0800
+Subject: [PATCH 3/3] =?utf-8?q?feat(EV2):=20=E8=AE=A9=E9=85=8D=E6=96=B9?=
+ =?utf-8?q?=E7=9C=9F=E6=AD=A3=E8=A2=AB=E6=89=A7=E8=A1=8C=E9=93=BE=E8=B7=AF?=
+ =?utf-8?q?=E6=B6=88=E8=B4=B9=20=E2=80=94=E2=80=94=20=E8=BF=9B=E5=8C=96?=
+ =?utf-8?q?=E9=97=AD=E7=8E=AF=E6=9C=80=E5=90=8E=E4=B8=80=E7=8E=AF=E6=8E=A5?=
+ =?utf-8?q?=E4=B8=8A?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+审计 P1-7 / EV2 原话：「给配方找一个消费者（**最关键的一步**）…
+做完这步，'自我进化'才不是演示动画。」
+
+EV1 已让「采纳」真落盘，但没有任何代码读它 → 闭环仍是断的。本提交接上。
+
+════ 新增 src/lib/recipe.ts（纯函数派生层 + 事实清单）════
+
+① `deriveParams(recipe)` —— 把 RecipeManifest 折算成 RecipeRuntimeParams：
+     toolRoundsLimit     ← plan_templates_update["__tool_rounds__"]
+     searchLimit         ← plan_templates_update["__search_limit__"]
+     auditPassFloor      ← qa_threshold_update.audit_pass_floor
+     minSamples          ← qa_threshold_update.min_samples
+     extraKeywords       ← lexicon_update（去空、去重、限 20）
+     deprioritizedSteps  ← plan_templates_update 中**值为负**的步骤名
+
+   纯函数：同输入同输出、无副作用、不依赖 Tauri（可单测）。
+
+② `BASELINE_PARAMS` —— 无配方时的基线，**刻意等于改造前的硬编码值**
+     （toolRoundsLimit: 6 = 原 `const MAX_ROUNDS = 6`）。
+     这样「没采纳过配方」的用户行为与改造前完全一致，不存在静默改默认行为。
+
+③ `PARAM_BOUNDS` —— 安全边界，夹紧工具轮数/检索条数/阈值/样本量。
+     配方不能把系统带进不可用状态；NaN / Infinity / 负值一律退回基线。
+
+④ `RECIPE_CONSUMPTION` —— **逐字段事实清单**，声明每个派生字段是否真被读取，
+     并写明 where（消费点位置）与 note。这是本文件的核心诚实性设计。
+
+════ 接线到 src/lib/agent.ts（4 个真实消费点）════
+
+沿用本仓库既有的 `setToolAIConfig` / `toolAiCfg` 同构写法：模块级快照 + 同步 getter
++ 一个 async 刷新入口 `refreshRuntimeRecipe()`。这样纯同步的
+`planFromSkeleton` / `runAgenticToolStep` 能**零签名变更**读到配方参数。
+
+| # | 消费点 | 改动 |
+|---|---|---|
+| ① | `runAgenticToolStep` 轮数上限 | `const MAX_ROUNDS = 6` → `= rp.toolRoundsLimit` |
+| ② | `runAgenticToolStep` 检索词 | 配方 `extraKeywords` 注入 system 提示 |
+| ③ | 工具结果回填 | 新增 `limitToolText(res.text, rp.searchLimit)` |
+| ④ | `planFromSkeleton` 弱化步骤 | `isDeprioritized()` 命中的步骤**移到末尾**并在 prompt 标注可跳过 |
+
+**关于 ③ 的一处刻意设计**：
+    只截断**回填给模型的文本**，**绝不截断 `task.refs`**。
+    因为 `refs` 是「本次工具真实返回集合」，是引用自检的判据；
+    为省上下文而砍掉它，会让自检把真法条误判为「未覆盖」——
+    那是把本产品最值钱的可信层弄坏。已在代码注释里写明这条理由。
+
+**关于 ④ 的实现选择**：
+    不给 `AgentStep` 加 `optional` 字段。因为该 schema 已被 `task_steps` 表持久化，
+    加字段要改 Rust 侧并做迁移；用「顺序 + 提示词」表达弱化，零 schema 变更。
+
+════ 接线到 UI ════
+
+- `Agent.tsx`：`doPlan()` 里在 `planTask` 前 `await refreshRuntimeRecipe()`
+    - 放在调用点而非 `planTask` 内部：保持 lib 层纯同步可测；
+      同时保证「读取一次 → 整个任务用同一版参数」，不会中途换配方
+- `Evolution.tsx`：采纳/回滚成功后立即 `refreshRuntimeRecipe()`，下一个任务就用新配方
+- `Evolution.tsx`：新增可折叠的**「配方参数接入情况」**明细表，直接渲染
+    `RECIPE_CONSUMPTION`，如实标出哪些字段尚未接入
+- 文案更新为「已采纳并保存到本机（编排参数将在下一个任务生效）」
+- `evolutionStore.RECIPE_CONSUMED_BY_AGENT`：false → **true**，并注明
+    「并非全部派生字段都已接入，见 RECIPE_CONSUMPTION」
+
+════ 新增 tests/recipe.test.ts（33 组）════
+
+A. 派生层（22 组）
+   - 无配方 → 基线；基线的 toolRoundsLimit 必须仍为 6（防偷改默认行为）
+   - 返回副本不污染基线
+   - 各字段覆盖正确；lexicon 去空/去重/限 20；负值 → deprioritizedSteps
+   - 边界夹紧：轮数、条数、阈值；NaN/Infinity/负值退回基线；输出恒为整数
+   - 纯函数性
+   - isDeprioritized：包含匹配、大小写无关、空值不误伤
+
+B. ★ **消费登记表 ↔ agent.ts 源码一致性**（6 组）—— 本提交最重要的一组
+   - 每个 `wired: true` 字段都能在 agent.ts 找到真实消费点
+     （直接断言源码含 `MAX_ROUNDS = rp.toolRoundsLimit`、
+       `limitToolText(res.text, rp.searchLimit)`、`rp.extraKeywords`、
+       `isDeprioritized(s.name, params)`）
+   - `wired: false` 的字段**不得**在 agent.ts 出现 `rp.<字段>`（防表过期）
+   - 断言 `const MAX_ROUNDS = 6` 已被移除
+   - 登记表覆盖全部派生字段（不能漏登记）
+   - `unconsumedFields()` 当前应为 `["auditPassFloor","minSamples"]`
+   - 每个 wired 条目都写明 where
+
+   价值：把「声称已接入」变成**可验证事实**。只改表不改代码、或只改代码不改表，
+   这组测试都会红。
+
+C. 运行时快照与文本截断（5 组）
+   - 默认基线；注入后 getter 可读；注入的是副本
+   - limitToolText：不超限原样；超限保留前 N 非空行并折叠；空行不计；空文本安全
+
+════ 验证证据 ════
+
+    npm test
+      Test Files  2 passed (2)
+      Tests       74 passed (74)      （evolution 41 + recipe 33）
+
+    npm run build
+      ✓ 80 modules transformed
+      exit=0                          （产物 323.11 kB，较 319.60 kB +3.51 kB）
+
+    P0-6 回归复核（新增 UI 内容未带回开发者术语）
+      grep 「方案稿|docs/12|未实现|不是梯度下降|纯仿真|0.8.0 规划」
+      src/views + src/components → 0 命中
+
+════ 仍未做（如实标注）════
+
+  - `auditPassFloor` / `minSamples` 已派生但**尚无消费点**，
+    由 RECIPE_CONSUMPTION 标为 `wired: false`，UI 明细表如实展示，
+    `unconsumedFields()` 可编程查询。这是状态说明，不是隐藏。
+  - EV1 的**端到端真机验证**仍未做（需 cargo 构建）。
+    当前 EV2 的证据级别 = 纯函数单测 + 源码一致性断言 + tsc/vite 构建通过，
+    **不等于**在 Tauri 真机上点过一次并观察到行为改变。
+---
+ src/lib/agent.ts          | 112 +++++++++++++-
+ src/lib/evolutionStore.ts |  13 +-
+ src/lib/recipe.ts         | 198 +++++++++++++++++++++++++
+ src/views/Agent.tsx       |   5 +
+ src/views/Evolution.tsx   |  31 +++-
+ tests/recipe.test.ts      | 301 ++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 651 insertions(+), 9 deletions(-)
+ create mode 100644 src/lib/recipe.ts
+ create mode 100644 tests/recipe.test.ts
+
+diff --git a/src/lib/agent.ts b/src/lib/agent.ts
+index e61d3e9..ac152f2 100644
+--- a/src/lib/agent.ts
++++ b/src/lib/agent.ts
+@@ -17,6 +17,13 @@ import { callRust, isTauri } from "./tauri";
+ import { embedTexts, cosine } from "./embed";
+ import { describeSkeleton, loadSkeleton, type KgSkeleton } from "./kg";
+ import type { ApiMsg } from "./ai";
++import {
++  BASELINE_PARAMS,
++  deriveParams,
++  isDeprioritized,
++  type RecipeRuntimeParams,
++} from "./recipe";
++import { activeVersion, loadRecipeState } from "./evolutionStore";
+ 
+ // ---------------------------------------------------------------------------
+ // 类型
+@@ -284,9 +291,95 @@ export function planFromSkeleton(kind: TaskKind, sk: KgSkeleton): AgentStep[] {
+     prompt: `${evNames.length ? `证据要点：${evNames.join("、")}。` : ""}按构成要件逐项展开，只引用工具真实返回的法条。`,
+   });
+   steps.push({ name: "质检：要件覆盖与引用核对", role: "qa" });
++
++  // EV2：配方消费点 ③ —— 被配方建议弱化的步骤移到末尾并标注为可选。
++  //   为什么不用新字段：AgentStep 已有 schema 被落库（task_steps 表）占用，
++  //   加字段要改 Rust 侧；用「顺序 + 提示词」表达弱化，零 schema 变更。
++  const params = getRuntimeRecipeParams();
++  if (params.deprioritizedSteps.length > 0) {
++    const keep: typeof steps = [];
++    const soft: typeof steps = [];
++    for (const s of steps) {
++      if (isDeprioritized(s.name, params)) {
++        soft.push({
++          ...s,
++          prompt: `【配方建议弱化】本步骤在已采纳的编排配方中优先级较低，可视情况跳过。${s.prompt ?? ""}`,
++        });
++      } else {
++        keep.push(s);
++      }
++    }
++    steps.length = 0;
++    steps.push(...keep, ...soft);
++  }
++
+   return steps.map((s, i) => ({ ...s, seq: i, status: "pending" as const }));
+ }
+ 
++/* ============================ EV2：配方运行时参数 ============================ */
++//
++// 设计：与 tools.ts 的 `setToolAIConfig` / `toolAiCfg` 同构 ——
++//   模块级快照 + 同步 getter + 一个 async 刷新入口。
++//   这样纯同步的 planFromSkeleton / runAgenticToolStep 能零签名变更地读到配方参数。
++//
++// 为什么不在每次执行时都 await 一次磁盘读：
++//   规划与工具循环都在热路径上，而配方变更频率极低（人工采纳才变）。
++//   由 UI 在启动与采纳后各刷新一次即可。
++
++let runtimeRecipeParams: RecipeRuntimeParams = { ...BASELINE_PARAMS };
++
++/** 同步读取当前生效的配方参数（未采纳过配方时为基线，行为与改造前一致） */
++export function getRuntimeRecipeParams(): RecipeRuntimeParams {
++  return runtimeRecipeParams;
++}
++
++/** 供测试注入（避免单测依赖 Tauri） */
++export function setRuntimeRecipeParamsForTest(p: RecipeRuntimeParams | null): void {
++  runtimeRecipeParams = p ? { ...p } : { ...BASELINE_PARAMS };
++}
++
++/**
++ * 按 `limit` 截断工具回填文本（**只影响给模型看的内容，不影响 refs**）。
++ *
++ * 工具（如 `laws_search`）自身返回条数固定；这里按配方再收一次，
++ * 目的是让模型在有限上下文里聚焦最相关的前 N 条。
++ *
++ * 判定「一条」的方式：按行切分，保留前 `limit` 个**非空行**，
++ * 其余折叠成一行提示。若文本本来就没几行，原样返回。
++ */
++export function limitToolText(text: string, limit: number): string {
++  if (!text) return text;
++  const lines = text.split("\n");
++  const nonEmptyIdx: number[] = [];
++  for (let i = 0; i < lines.length; i++) {
++    if (lines[i].trim().length > 0) nonEmptyIdx.push(i);
++  }
++  if (nonEmptyIdx.length <= limit) return text;
++  const cut = nonEmptyIdx[limit - 1]; // 第 limit 个非空行的下标
++  const head = lines.slice(0, cut + 1);
++  const rest = nonEmptyIdx.length - limit;
++  return [...head, `…（另有 ${rest} 条同类结果已省略，可在右侧引用清单查看全部）`].join("\n");
++}
++
++/**
++ * 从本机读取已采纳的配方并刷新运行时参数。
++ * 失败时不抛异常：退回基线，保证「配方读不到」不影响正常办案。
++ *
++ * @returns 是否成功读到某版配方
++ */
++export async function refreshRuntimeRecipe(): Promise<boolean> {
++  try {
++    const { state } = await loadRecipeState();
++    const ver = activeVersion(state);
++    runtimeRecipeParams = deriveParams(ver?.recipe ?? null);
++    return ver !== null;
++  } catch (e) {
++    console.warn("[agent] 读取编排配方失败，退回基线参数：", e);
++    runtimeRecipeParams = { ...BASELINE_PARAMS };
++    return false;
++  }
++}
++
+ export async function planTask(
+   cfg: AIConfig | null,
+   kind: TaskKind,
+@@ -427,12 +520,20 @@ async function runAgenticToolStep(
+   signal?: AbortSignal,
+ ): Promise<string> {
+   const params = step.params ?? {};
++  // EV2：配方消费点 ①② —— 读取已采纳编排配方的运行时参数。
++  //   未采纳过配方时 rp === BASELINE_PARAMS，行为与改造前完全一致。
++  const rp = getRuntimeRecipeParams();
++  const kwHint =
++    rp.extraKeywords.length > 0
++      ? `\n本机已采纳的检索词补充（优先尝试）：${rp.extraKeywords.join("、")}`
++      : "";
+   const sys =
+     roleSystem("retriever") +
+     `\n本步目标：${step.name}\n` +
+     `计划建议的检索参数：${JSON.stringify(params)}\n` +
+     `可用工具会访问本地真实法库（内置 15 万条日美法条文等）。必要时连续调用多个工具；` +
+-    `引用任何条文都必须来自工具真实返回。检索完成后，用一两句话汇报要点与命中数量，不要编造。`;
++    `引用任何条文都必须来自工具真实返回。检索完成后，用一两句话汇报要点与命中数量，不要编造。` +
++    kwHint;
+   const msgs: ApiMsg[] = [
+     { role: "system", content: sys },
+     {
+@@ -442,7 +543,8 @@ async function runAgenticToolStep(
+   ];
+ 
+   let finalText = "";
+-  const MAX_ROUNDS = 6;
++  // EV2：轮数上限来自配方（基线 6 = 改造前的硬编码值）
++  const MAX_ROUNDS = rp.toolRoundsLimit;
+   for (let round = 0; round < MAX_ROUNDS; round++) {
+     const { content, tool_calls } = await chatStreamOnce(cfg, msgs, {
+       tools: tools.defs,
+@@ -479,7 +581,11 @@ async function runAgenticToolStep(
+         emit({ step, kind: "tool_result", text: res.text });
+       }
+       finalText = res.text;
+-      msgs.push({ role: "tool", tool_call_id: tc.id, content: res.text });
++      // EV2：配方消费点 ③ —— 限制**回填给模型**的条数。
++      //   ⚠️ 只截断文本，**不截断 refs**：
++      //      refs 是「本次工具真实返回集合」，是引用自检的判据；
++      //      砍掉它会让自检把真法条误判为「未覆盖」，属于把可信层弄坏。
++      msgs.push({ role: "tool", tool_call_id: tc.id, content: limitToolText(res.text, rp.searchLimit) });
+     }
+     if (round === MAX_ROUNDS - 1) {
+       finalText += "\n（已达最大工具轮数，由执行器截断）";
+diff --git a/src/lib/evolutionStore.ts b/src/lib/evolutionStore.ts
+index 5006ab9..a5958aa 100644
+--- a/src/lib/evolutionStore.ts
++++ b/src/lib/evolutionStore.ts
+@@ -22,13 +22,16 @@ export const RECIPE_STATE_KEY = "evolution.recipe_state";
+ /**
+  * 配方是否已被**执行链路**消费（EV2）。
+  *
+- * 当前为 `false` —— 配方会被持久化、可回滚，但**没有任何代码读它去改变 agent 行为**。
+- * UI 文案必须据此区分「已保存到本机」与「已改变 agent 行为」。
++ * ✅ 自 EV2 落地起为 `true`：`src/lib/recipe.ts` 的 `deriveParams()` 会把配方折算成
++ *    运行时参数，`src/lib/agent.ts` 在工具循环里真实读取
++ *    （轮数上限 / 回填条数 / 检索词补充 / 弱化步骤）。
+  *
+- * ⚠️ 在 EV2 落地（`lib/agent.ts` 真的读取配方参数）之前，
+- *    这个常量**不得**改为 true。
++ * ⚠️ 但**并非全部派生字段都已接入**。`recipe.ts` 的 `RECIPE_CONSUMPTION`
++ *    是逐字段的事实清单（`auditPassFloor`、`minSamples` 仍为 `wired: false`），
++ *    由 `unconsumedFields()` 如实报出。UI 若展示"配方已生效"，
++ *    必须同时说明未接入的字段。
+  */
+-export const RECIPE_CONSUMED_BY_AGENT = false;
++export const RECIPE_CONSUMED_BY_AGENT = true;
+ 
+ /** 一版配方快照 */
+ export interface RecipeVersion {
+diff --git a/src/lib/recipe.ts b/src/lib/recipe.ts
+new file mode 100644
+index 0000000..93468f9
+--- /dev/null
++++ b/src/lib/recipe.ts
+@@ -0,0 +1,198 @@
++// 配方 → 运行时参数（EV2：让「自我进化」真正闭环）。
++//
++// 背景：
++//   `lib/evolution.ts` 会产出一版 `RecipeManifest`，`evolutionStore.ts` 会把它
++//   持久化到本机 —— 但**没有任何代码读它去改变行为**，进化闭环的最后一环是断的
++//   （审计编号 EV2）。
++//
++// 本模块做两件事，且严格分开：
++//   ① **纯函数派生层**（`deriveParams` / `isConsumed`）：把配方折算成具体运行参数，
++//      可单测、无副作用、不依赖 Tauri。
++//   ② **消费登记表**（`RECIPE_CONSUMPTION`）：逐项声明「这个参数到底有没有被读取」。
++//
++// ⚠️ 诚实性设计（本文件的核心约束）：
++//    消费登记表是**事实清单**，不是愿望清单。
++//    凡未真正接入执行链路的字段，必须在表里标 `wired: false`，
++//    并由 `unconsumedFields()` 如实报出。
++//    `tests/recipe.test.ts` 会**断言表与代码一致**，防止有人只改表不改代码。
++
++import type { RecipeManifest } from "./evolution";
++
++/* ============================ 参数与基线 ============================ */
++
++/** 配方折算出的运行时参数（agent 侧只读这些，不直接读配方） */
++export interface RecipeRuntimeParams {
++  /** 工具调用循环最大轮数 */
++  toolRoundsLimit: number;
++  /** 检索类工具返回条数上限 */
++  searchLimit: number;
++  /** 引用自检通过率下限（低于此值的批次不应被采信） */
++  auditPassFloor: number;
++  /** 判定所需最小样本量 */
++  minSamples: number;
++  /** 由配方推荐补充的检索词（去重后） */
++  extraKeywords: string[];
++  /** 应尽量跳过的计划步骤名（来自 plan_templates_update 的负向建议） */
++  deprioritizedSteps: string[];
++}
++
++/**
++ * 无配方时的基线（= 0.7.2 的现有行为）。
++ * 必须与改造前的硬编码值一致，保证「没采纳过配方」时行为不变。
++ */
++export const BASELINE_PARAMS: RecipeRuntimeParams = {
++  toolRoundsLimit: 6, // 原 agent.ts 里的 const MAX_ROUNDS = 6
++  searchLimit: 5,
++  auditPassFloor: 0.8,
++  minSamples: 20, // 对齐 K_ANON_PROD
++  extraKeywords: [],
++  deprioritizedSteps: [],
++};
++
++/** 参数的安全边界（防止配方把系统带进不可用状态） */
++export const PARAM_BOUNDS = {
++  toolRoundsLimit: { min: 2, max: 12 },
++  searchLimit: { min: 1, max: 10 },
++  auditPassFloor: { min: 0.5, max: 1 },
++  minSamples: { min: 1, max: 100 },
++} as const;
++
++function clamp(v: number, lo: number, hi: number): number {
++  if (!Number.isFinite(v)) return lo;
++  return Math.min(hi, Math.max(lo, v));
++}
++
++/* ============================ 纯函数派生层 ============================ */
++
++/**
++ * 把配方折算成运行时参数。**纯函数**：同输入同输出，无副作用。
++ *
++ * 四个字段各有明确来源：
++ *   - `toolRoundsLimit` ← `plan_templates_update["__tool_rounds__"]`
++ *       配方值 > 0 表示「本版本建议的工具轮数」；缺省则沿用基线
++ *   - `searchLimit`     ← `plan_templates_update["__search_limit__"]`
++ *   - `auditPassFloor`  ← `qa_threshold_update.audit_pass_floor`
++ *   - `minSamples`      ← `qa_threshold_update.min_samples`
++ *   - `extraKeywords`   ← `lexicon_update`
++ *   - `deprioritizedSteps` ← `plan_templates_update` 中**值为负数**的步骤名
++ *       （语义：该步骤在本版本被建议弱化）
++ *
++ * @param recipe 当前生效的配方；`null` 表示无配方 → 返回基线
++ */
++export function deriveParams(recipe: RecipeManifest | null | undefined): RecipeRuntimeParams {
++  if (!recipe) return { ...BASELINE_PARAMS };
++
++  const pt = recipe.plan_templates_update ?? {};
++  const qa = recipe.qa_threshold_update;
++  const lex = recipe.lexicon_update ?? [];
++
++  const roundsRaw = Number(pt["__tool_rounds__"]);
++  const limitRaw = Number(pt["__search_limit__"]);
++
++  // 负值/非有限值视为「未建议」，沿用基线
++  const toolRoundsLimit = clamp(
++    Number.isFinite(roundsRaw) && roundsRaw > 0 ? roundsRaw : BASELINE_PARAMS.toolRoundsLimit,
++    PARAM_BOUNDS.toolRoundsLimit.min,
++    PARAM_BOUNDS.toolRoundsLimit.max,
++  );
++  const searchLimit = clamp(
++    Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : BASELINE_PARAMS.searchLimit,
++    PARAM_BOUNDS.searchLimit.min,
++    PARAM_BOUNDS.searchLimit.max,
++  );
++  const auditPassFloor = clamp(
++    qa && Number.isFinite(qa.audit_pass_floor) ? qa.audit_pass_floor : BASELINE_PARAMS.auditPassFloor,
++    PARAM_BOUNDS.auditPassFloor.min,
++    PARAM_BOUNDS.auditPassFloor.max,
++  );
++  const minSamples = clamp(
++    qa && Number.isFinite(qa.min_samples) ? qa.min_samples : BASELINE_PARAMS.minSamples,
++    PARAM_BOUNDS.minSamples.min,
++    PARAM_BOUNDS.minSamples.max,
++  );
++
++  // 关键词：去空、去重、限量（防止配方把提示词撑爆）
++  const extraKeywords = [...new Set(
++    lex.map((k) => String(k).trim()).filter((k) => k.length > 0),
++  )].slice(0, 20);
++
++  // 值为负的条目 = 建议弱化该步骤
++  const deprioritizedSteps = Object.entries(pt)
++    .filter(([k, v]) => !k.startsWith("__") && Number(v) < 0)
++    .map(([k]) => k)
++    .slice(0, 20);
++
++  return {
++    toolRoundsLimit: Math.round(toolRoundsLimit),
++    searchLimit: Math.round(searchLimit),
++    auditPassFloor,
++    minSamples: Math.round(minSamples),
++    extraKeywords,
++    deprioritizedSteps,
++  };
++}
++
++/** 该步骤是否被配方建议弱化（按名称包含匹配，大小写无关） */
++export function isDeprioritized(stepName: string, params: RecipeRuntimeParams): boolean {
++  if (!stepName || params.deprioritizedSteps.length === 0) return false;
++  const n = stepName.toLowerCase();
++  return params.deprioritizedSteps.some((d) => n.includes(d.toLowerCase()));
++}
++
++/* ============================ 消费登记表（事实清单） ============================ */
++
++/**
++ * 逐字段声明「是否已被执行链路真正读取」。
++ *
++ * ⚠️ 这不是文档，而是**被测试断言的事实清单**：
++ *   `tests/recipe.test.ts` 会断言 `wired: true` 的字段在 agent.ts 中确实被引用。
++ *   改了代码就要改这张表，否则测试红。
++ *
++ * `where` 指向真正的消费点，便于人工复核。
++ */
++export const RECIPE_CONSUMPTION: Record<
++  keyof RecipeRuntimeParams,
++  { wired: boolean; where: string; note?: string }
++> = {
++  toolRoundsLimit: {
++    wired: true,
++    where: "src/lib/agent.ts · runAgenticToolStep",
++    note: "取代原硬编码 const MAX_ROUNDS = 6",
++  },
++  searchLimit: {
++    wired: true,
++    where: "src/lib/agent.ts · runAgenticToolStep（回填工具结果时截断）",
++    note: "限制单次检索回填给模型的条数",
++  },
++  extraKeywords: {
++    wired: true,
++    where: "src/lib/agent.ts · runAgenticToolStep（注入 system 提示）",
++    note: "配方推荐补充的检索词",
++  },
++  deprioritizedSteps: {
++    wired: true,
++    where: "src/lib/agent.ts · planFromSkeleton",
++    note: "被建议弱化的步骤在计划中降级为可选",
++  },
++  auditPassFloor: {
++    wired: false,
++    where: "（未接入）",
++    note: "已派生但尚无消费点：自检通过率阈值目前只在 Evolution 页用于 A/B 判定",
++  },
++  minSamples: {
++    wired: false,
++    where: "（未接入）",
++    note: "已派生但尚无消费点：样本量门槛目前由 kAnonymityFilter 独立决定",
++  },
++};
++
++/** 列出**已派生但未被消费**的字段（供 UI / 文档如实展示） */
++export function unconsumedFields(): string[] {
++  return (Object.keys(RECIPE_CONSUMPTION) as Array<keyof RecipeRuntimeParams>)
++    .filter((k) => !RECIPE_CONSUMPTION[k].wired);
++}
++
++/** 是否所有派生字段都已被消费（EV2 完成的判据） */
++export function isFullyConsumed(): boolean {
++  return unconsumedFields().length === 0;
++}
+diff --git a/src/views/Agent.tsx b/src/views/Agent.tsx
+index 8dafd06..4aca0c0 100644
+--- a/src/views/Agent.tsx
++++ b/src/views/Agent.tsx
+@@ -13,6 +13,7 @@ import {
+   deliverTask,
+   rememberTask,
+   makeRunner,
++  refreshRuntimeRecipe,
+ } from "../lib/agent";
+ import { useSettings } from "../hooks/useSettings";
+ import { useDocuments } from "../hooks/useDocuments";
+@@ -220,6 +221,10 @@ export default function Agent() {
+     setPlanning(true);
+     setMsg(null);
+     try {
++      // EV2：每次制定计划前刷新一次「已采纳的编排配方」运行时参数。
++      //   放在这里而不是 planTask 内部：保持 lib 层纯同步可测，
++      //   同时保证「读取一次 → 整个任务用同一版参数」，不会中途换配方。
++      await refreshRuntimeRecipe();
+       const plan = await planTask(cfg, kind, text);
+       const meta = TASK_KINDS.find((k) => k.key === kind)!;
+       const t: AgentTask = {
+diff --git a/src/views/Evolution.tsx b/src/views/Evolution.tsx
+index 30f000e..310cf4d 100644
+--- a/src/views/Evolution.tsx
++++ b/src/views/Evolution.tsx
+@@ -21,6 +21,8 @@ import {
+   type TaskLog,
+ } from "../lib/evolution";
+ import { adoptRecipe, rollbackRecipe } from "../lib/evolutionStore";
++import { refreshRuntimeRecipe } from "../lib/agent";
++import { RECIPE_CONSUMPTION, unconsumedFields } from "../lib/recipe";
+ import "../components/Evolution.css";
+ 
+ /* ============================ 常量 ============================ */
+@@ -301,6 +303,8 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+       if (ok) {
+         // 真正持久化到本机 SQLite（settings 表，key = evolution.recipe_state）
+         await adoptRecipe(manifest.version, manifest.signature, manifest);
++        // EV2：立刻刷新执行链路用的运行时参数，使下一个任务就用上新配方
++        await refreshRuntimeRecipe();
+         setAbState("adopted");
+         setJournal((j) => [
+           `采纳 配方 v${manifest.version}（指纹 ${manifest.signature}，${new Date().toLocaleTimeString()}）`,
+@@ -308,6 +312,7 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+         ]);
+       } else {
+         await rollbackRecipe();
++        await refreshRuntimeRecipe();
+         setAbState("rolled");
+         setJournal((j) => [
+           `回滚到 配方 v${manifest.version - 1}（保留上一版，${new Date().toLocaleTimeString()}）`,
+@@ -816,7 +821,7 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+                 : abState === "pending"
+                   ? "待人工决策（新配方已下载但未生效）"
+                   : abState === "adopted"
+-                    ? "已采纳并保存到本机（当前版本尚未接入文书智能体执行链路）"
++                    ? "已采纳并保存到本机（编排参数将在下一个任务生效）"
+                     : "已回滚（保留最近 2 个版本）"}
+               {decideError && (
+                 <span style={{ color: "var(--danger, #c00)", display: "block", marginTop: 4 }}>
+@@ -824,6 +829,30 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+                 </span>
+               )}
+             </p>
++            {/* 配方消费明细：如实列出「哪些参数已接入执行链路、哪些还没有」。
++                这张表来自 lib/recipe.ts 的 RECIPE_CONSUMPTION，
++                并由 tests/recipe.test.ts 断言与 agent.ts 源码一致。 */}
++            <details style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
++              <summary style={{ cursor: "pointer" }}>
++                配方参数接入情况（已接入 {Object.values(RECIPE_CONSUMPTION).filter((c) => c.wired).length}
++                /{Object.keys(RECIPE_CONSUMPTION).length}）
++              </summary>
++              <ul style={{ margin: "6px 0 0 18px", padding: 0, lineHeight: 1.7 }}>
++                {Object.entries(RECIPE_CONSUMPTION).map(([field, info]) => (
++                  <li key={field}>
++                    <code>{field}</code>
++                    {" — "}
++                    {info.wired ? "✓ 已接入执行链路" : "○ 尚未接入"}
++                    {info.note ? `：${info.note}` : ""}
++                  </li>
++                ))}
++                {unconsumedFields().length > 0 && (
++                  <li style={{ marginTop: 4 }}>
++                    未接入的 {unconsumedFields().length} 项仅为派生值，当前**不会**改变文书生成行为。
++                  </li>
++                )}
++              </ul>
++            </details>
+           </div>
+           <div className="evo-card">
+             <h3>本机进化日志（本地留存、可删）</h3>
+diff --git a/tests/recipe.test.ts b/tests/recipe.test.ts
+new file mode 100644
+index 0000000..7f8b8f3
+--- /dev/null
++++ b/tests/recipe.test.ts
+@@ -0,0 +1,301 @@
++// EV2 单测：配方派生层 + 消费登记表与代码的一致性。
++//
++// 两组断言，各有明确目的：
++//
++//   A. 派生层纯函数（deriveParams / isDeprioritized）
++//      证明「配方 → 参数」的折算正确、有边界、可复现。
++//
++//   B. **消费登记表 ↔ agent.ts 源码的一致性**
++//      这是本文件最重要的一组：`recipe.ts` 的 RECIPE_CONSUMPTION 声明了
++//      「哪些字段已被执行链路真正读取」。如果只改表不改代码（或反之），
++//      这组测试会红 —— 把「声称已接入」变成可验证事实，而不是文档承诺。
++//
++// 运行：npm test
++
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { dirname, resolve } from "node:path";
++
++import { describe, expect, it } from "vitest";
++
++import {
++  BASELINE_PARAMS,
++  PARAM_BOUNDS,
++  RECIPE_CONSUMPTION,
++  deriveParams,
++  isDeprioritized,
++  unconsumedFields,
++  isFullyConsumed,
++  type RecipeRuntimeParams,
++} from "../src/lib/recipe";
++import { getRuntimeRecipeParams, setRuntimeRecipeParamsForTest, limitToolText } from "../src/lib/agent";
++import type { RecipeManifest } from "../src/lib/evolution";
++
++const HERE = dirname(fileURLToPath(import.meta.url));
++const AGENT_SRC = readFileSync(resolve(HERE, "../src/lib/agent.ts"), "utf8");
++
++/** 造一版配方；只覆写关心的字段 */
++function mkRecipe(over: Partial<RecipeManifest> = {}): RecipeManifest {
++  return {
++    version: 7,
++    created_at: new Date(0).toISOString(),
++    signature: "SIG123",
++    source: "sim",
++    entries: [],
++    dropped: [],
++    plan_templates_update: {},
++    lexicon_update: [],
++    qa_threshold_update: { audit_pass_floor: 0.8, min_samples: 20 },
++    memory_prototypes: [],
++    dp_epsilon: 0,
++    notes: [],
++    payload_bytes: 0,
++    ...over,
++  };
++}
++
++/* ============================ A. 派生层 ============================ */
++
++describe("deriveParams：无配方 → 基线（行为与改造前一致）", () => {
++  it("null / undefined 都返回基线", () => {
++    expect(deriveParams(null)).toEqual(BASELINE_PARAMS);
++    expect(deriveParams(undefined)).toEqual(BASELINE_PARAMS);
++  });
++
++  it("基线必须保持改造前的硬编码值（否则等于偷偷改了默认行为）", () => {
++    // 改造前 agent.ts: const MAX_ROUNDS = 6;
++    expect(BASELINE_PARAMS.toolRoundsLimit).toBe(6);
++  });
++
++  it("返回的是副本，改返回值不会污染基线", () => {
++    const p = deriveParams(null);
++    p.toolRoundsLimit = 999;
++    expect(BASELINE_PARAMS.toolRoundsLimit).toBe(6);
++  });
++});
++
++describe("deriveParams：配方生效", () => {
++  it("__tool_rounds__ 覆盖轮数上限", () => {
++    const r = mkRecipe({ plan_templates_update: { __tool_rounds__: 9 } });
++    expect(deriveParams(r).toolRoundsLimit).toBe(9);
++  });
++
++  it("__search_limit__ 覆盖检索条数", () => {
++    const r = mkRecipe({ plan_templates_update: { __search_limit__: 3 } });
++    expect(deriveParams(r).searchLimit).toBe(3);
++  });
++
++  it("qa_threshold_update 覆盖阈值与样本量", () => {
++    const r = mkRecipe({
++      qa_threshold_update: { audit_pass_floor: 0.95, min_samples: 50 },
++    });
++    const p = deriveParams(r);
++    expect(p.auditPassFloor).toBe(0.95);
++    expect(p.minSamples).toBe(50);
++  });
++
++  it("lexicon_update 变为 extraKeywords，去空去重且限量 20", () => {
++    const r = mkRecipe({
++      lexicon_update: ["契約", "  ", "契約", "遺留分", ...Array.from({ length: 30 }, (_, i) => `k${i}`)],
++    });
++    const kw = deriveParams(r).extraKeywords;
++    expect(kw).toContain("契約");
++    expect(kw).toContain("遺留分");
++    expect(kw).not.toContain("");           // 空串被过滤
++    expect(kw.filter((k) => k === "契約")).toHaveLength(1); // 去重
++    expect(kw.length).toBeLessThanOrEqual(20);
++  });
++
++  it("plan_templates_update 中**值为负**的步骤 → deprioritizedSteps", () => {
++    const r = mkRecipe({
++      plan_templates_update: { 载入文书模板: -1, 检索法律依据: 2, __tool_rounds__: 5 },
++    });
++    const p = deriveParams(r);
++    expect(p.deprioritizedSteps).toEqual(["载入文书模板"]);
++    expect(p.deprioritizedSteps).not.toContain("__tool_rounds__"); // 内部键不算步骤
++  });
++});
++
++describe("deriveParams：边界夹紧（配方不能把系统带坏）", () => {
++  it("轮数上限被夹到 [min,max]", () => {
++    const lo = deriveParams(mkRecipe({ plan_templates_update: { __tool_rounds__: 0.5 } }));
++    const hi = deriveParams(mkRecipe({ plan_templates_update: { __tool_rounds__: 999 } }));
++    expect(lo.toolRoundsLimit).toBe(PARAM_BOUNDS.toolRoundsLimit.min);
++    expect(hi.toolRoundsLimit).toBe(PARAM_BOUNDS.toolRoundsLimit.max);
++  });
++
++  it("检索条数被夹到 [min,max]", () => {
++    expect(deriveParams(mkRecipe({ plan_templates_update: { __search_limit__: 999 } })).searchLimit)
++      .toBe(PARAM_BOUNDS.searchLimit.max);
++  });
++
++  it("非有限值（NaN / Infinity）退回基线而非产生 NaN", () => {
++    const p = deriveParams(mkRecipe({ plan_templates_update: { __tool_rounds__: Number.NaN } }));
++    expect(p.toolRoundsLimit).toBe(BASELINE_PARAMS.toolRoundsLimit);
++    expect(Number.isFinite(p.toolRoundsLimit)).toBe(true);
++  });
++
++  it("负值视为「未建议」，退回基线", () => {
++    const p = deriveParams(mkRecipe({ plan_templates_update: { __tool_rounds__: -5 } }));
++    expect(p.toolRoundsLimit).toBe(BASELINE_PARAMS.toolRoundsLimit);
++  });
++
++  it("阈值下限被夹到 0.5（不允许把门槛设到 0 而失去意义）", () => {
++    const p = deriveParams(mkRecipe({ qa_threshold_update: { audit_pass_floor: 0, min_samples: 20 } }));
++    expect(p.auditPassFloor).toBe(PARAM_BOUNDS.auditPassFloor.min);
++  });
++
++  it("派生结果是纯函数：同输入同输出", () => {
++    const r = mkRecipe({ plan_templates_update: { __tool_rounds__: 8 } });
++    expect(deriveParams(r)).toEqual(deriveParams(r));
++  });
++
++  it("输出恒为整数轮数 / 条数（避免把小数传给循环）", () => {
++    const p = deriveParams(mkRecipe({ plan_templates_update: { __tool_rounds__: 7.6, __search_limit__: 4.4 } }));
++    expect(Number.isInteger(p.toolRoundsLimit)).toBe(true);
++    expect(Number.isInteger(p.searchLimit)).toBe(true);
++  });
++});
++
++describe("isDeprioritized", () => {
++  const params: RecipeRuntimeParams = { ...BASELINE_PARAMS, deprioritizedSteps: ["载入文书模板"] };
++
++  it("名称包含即命中", () => {
++    expect(isDeprioritized("载入文书模板", params)).toBe(true);
++  });
++
++  it("大小写无关", () => {
++    const p = { ...params, deprioritizedSteps: ["Template"] };
++    expect(isDeprioritized("load template step", p)).toBe(true);
++  });
++
++  it("未命中返回 false", () => {
++    expect(isDeprioritized("起草正文", params)).toBe(false);
++  });
++
++  it("空步骤名 / 空清单 → false（不误伤）", () => {
++    expect(isDeprioritized("", params)).toBe(false);
++    expect(isDeprioritized("载入文书模板", BASELINE_PARAMS)).toBe(false);
++  });
++});
++
++/* ============================ B. 消费登记表 ↔ 源码一致性 ============================ */
++
++describe("★ 消费登记表必须与 agent.ts 源码一致（防止只改表不改代码）", () => {
++  it("每个 wired:true 的字段都能在 agent.ts 找到真实消费点", () => {
++    // 字段 → 期望在源码中出现的证据
++    const evidence: Record<string, string[]> = {
++      // 轮数上限：替换了原硬编码 MAX_ROUNDS
++      toolRoundsLimit: ["MAX_ROUNDS = rp.toolRoundsLimit"],
++      // 回填条数：调用 limitToolText 时传 rp.searchLimit
++      searchLimit: ["limitToolText(res.text, rp.searchLimit)"],
++      // 检索词补充：注入 system 提示
++      extraKeywords: ["rp.extraKeywords"],
++      // 弱化步骤：planFromSkeleton 里调用 isDeprioritized
++      deprioritizedSteps: ["isDeprioritized(s.name, params)"],
++    };
++
++    const missing: string[] = [];
++    for (const [field, needles] of Object.entries(evidence)) {
++      if (!RECIPE_CONSUMPTION[field as keyof RecipeRuntimeParams].wired) continue;
++      for (const n of needles) {
++        if (!AGENT_SRC.includes(n)) missing.push(`${field}: 源码中找不到「${n}」`);
++      }
++    }
++    expect(missing).toEqual([]);
++  });
++
++  it("wired:false 的字段**不得**在 agent.ts 中被消费（否则表已过期）", () => {
++    const overclaims: string[] = [];
++    for (const f of unconsumedFields()) {
++      // 这些字段若真被消费，源码里应出现 rp.<字段>
++      if (AGENT_SRC.includes(`rp.${f}`)) {
++        overclaims.push(`${f} 标注为未接入，但 agent.ts 中出现了 rp.${f}`);
++      }
++    }
++    expect(overclaims).toEqual([]);
++  });
++
++  it("硬编码的 MAX_ROUNDS = 6 已被移除（改由配方提供）", () => {
++    expect(AGENT_SRC).not.toContain("const MAX_ROUNDS = 6");
++  });
++
++  it("消费登记表覆盖全部派生字段（不能漏登记）", () => {
++    const derived = Object.keys(BASELINE_PARAMS) as Array<keyof RecipeRuntimeParams>;
++    const registered = Object.keys(RECIPE_CONSUMPTION);
++    expect(new Set(registered)).toEqual(new Set(derived));
++  });
++
++  it("unconsumedFields / isFullyConsumed 与表一致", () => {
++    const un = unconsumedFields();
++    expect(un).toEqual(["auditPassFloor", "minSamples"]);
++    expect(isFullyConsumed()).toBe(un.length === 0);
++    // 当前确实还未完全接入 —— 这是如实状态，不是缺陷
++    expect(isFullyConsumed()).toBe(false);
++  });
++
++  it("每个 wired:true 条目都写明了 where（可人工复核）", () => {
++    for (const [k, v] of Object.entries(RECIPE_CONSUMPTION)) {
++      if (v.wired) {
++        expect(v.where, `${k} 缺少 where`).toContain("agent.ts");
++        expect(v.where).not.toContain("未接入");
++      }
++    }
++  });
++});
++
++/* ============================ C. 运行时快照与文本截断 ============================ */
++
++describe("运行时参数快照", () => {
++  it("默认是基线（未采纳配方时行为不变）", () => {
++    setRuntimeRecipeParamsForTest(null);
++    expect(getRuntimeRecipeParams()).toEqual(BASELINE_PARAMS);
++  });
++
++  it("注入后 getter 能读到", () => {
++    setRuntimeRecipeParamsForTest({ ...BASELINE_PARAMS, toolRoundsLimit: 11 });
++    expect(getRuntimeRecipeParams().toolRoundsLimit).toBe(11);
++    setRuntimeRecipeParamsForTest(null); // 复原，避免影响其它用例
++  });
++
++  it("注入的是副本，外部改对象不影响快照", () => {
++    const p = { ...BASELINE_PARAMS, searchLimit: 2 };
++    setRuntimeRecipeParamsForTest(p);
++    p.searchLimit = 99;
++    expect(getRuntimeRecipeParams().searchLimit).toBe(2);
++    setRuntimeRecipeParamsForTest(null);
++  });
++});
++
++describe("limitToolText：只影响给模型看的内容", () => {
++  it("行数不超限时原样返回", () => {
++    const t = "第1条\n第2条";
++    expect(limitToolText(t, 5)).toBe(t);
++  });
++
++  it("超限时保留前 N 个非空行并折叠其余", () => {
++    const t = ["a", "b", "c", "d", "e", "f"].join("\n");
++    const out = limitToolText(t, 3);
++    expect(out).toContain("a");
++    expect(out).toContain("c");
++    expect(out).not.toContain("\nd\n"); // d 之后被折叠
++    expect(out).toContain("另有 3 条");
++  });
++
++  it("空行不计入条数", () => {
++    const t = ["a", "", "b", "", "c", "d"].join("\n");
++    const out = limitToolText(t, 3);
++    expect(out).toContain("c");
++    expect(out).toContain("另有 1 条");
++  });
++
++  it("空文本安全返回", () => {
++    expect(limitToolText("", 3)).toBe("");
++  });
++
++  it("limit=1 只留第一行", () => {
++    const out = limitToolText("a\nb\nc", 1);
++    expect(out.startsWith("a")).toBe(true);
++    expect(out).toContain("另有 2 条");
++  });
++});
+-- 
+2.54.0.windows.1
+

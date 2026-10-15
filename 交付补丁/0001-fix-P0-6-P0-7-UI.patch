@@ -1,0 +1,447 @@
+From 8ea4585aeb451375e988ad126c740b5d2fd5f96f Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Thu, 15 Oct 2026 14:59:20 +0800
+Subject: [PATCH 1/3] =?utf-8?q?fix(P0-6/P0-7):=20=E6=B8=85=E7=90=86?=
+ =?utf-8?q?=E4=BA=A7=E5=93=81=20UI=20=E4=B8=AD=E7=9A=84=E5=BC=80=E5=8F=91?=
+ =?utf-8?q?=E8=80=85=E8=AF=B4=E6=98=8E=20+=20=E4=BF=AE=E6=AD=A3=E3=80=8C?=
+ =?utf-8?q?=E5=B7=B2=E9=87=87=E7=BA=B3=E3=80=8D=E8=99=9A=E6=8A=A5?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+依据《01-改进建议.md》的 P0-6 / P0-7 与 EV1/EV3。
+**这是在本仓库（Legal-Workspace）内的改动，不在 faron-openjiuwen-agentgroup。**
+
+════ P0-7（EV1）· 修正虚报，且真的落地持久化 ════
+
+问题：Evolution.tsx 的 decide() 原为
+
+    const decide = (ok: boolean) => {
+      if (ok) { setAbState("adopted"); setJournal(...) }   // 零持久化、零后端调用
+      else    { setAbState("rolled");  setJournal(...) }
+    };
+
+而 UI 在 abState === "adopted" 时显示「已采纳（本机生效）」——该表述不成立。
+审计对 Rust 侧的核查也已复现：evolution / fre_ / recipe / 配方 在 src-tauri 内 0 命中。
+
+处理：**二选一里选了「让它真的落地」**，而不是只改文案。
+
+新增 src/lib/evolutionStore.ts（持久化层，141 行）：
+  - 复用已有的 settings_get / settings_set 命令与 settings 表
+    （key = "evolution.recipe_state"），**无需改 Rust**
+  - 用 invokeStrict 而非 callRust —— 写失败会抛出，UI 能如实显示失败
+  - adoptRecipe(version, signature, manifest)：压入历史并标记生效后真正写盘
+  - rollbackRecipe()：active_version 指回上一版并真正写盘
+  - MAX_HISTORY = 10；数据损坏时退回空状态而非卡死
+  - 导出 RECIPE_CONSUMED_BY_AGENT = false —— EV2（配方被执行链路消费）尚未实现，
+    作为类型化的边界声明保留，供 EV2 落地时切换
+
+Evolution.tsx 改动：
+  - decide() 改为 async，真正 await adoptRecipe / rollbackRecipe
+  - 新增 busy（写入中禁用按钮）与 decideError（真实错误文本，不吞错）
+  - 文案改为「已采纳并保存到本机（当前版本尚未接入文书智能体执行链路）」
+    —— 既不说「已生效」，也不隐瞒未接入的事实
+  - 采纳项改用 manifest.version（原为硬编码 TOTAL_ROUNDS）
+
+证据：npm run build exit=0（79 modules，+1 为新模块）
+      grep 「本机生效」在 src/ 下 = 0 命中
+
+════ P0-6 · 清理 UI 中的开发者/评委向说明 ════
+
+判定标准（审计给的）：把这段字给一个不写代码的律师看，他需要知道吗？不需要 → 移出 UI。
+纪律：**是「移出 UI」，不是「删除」**——边界声明在文档中完整保留（见下）。
+
+| 位置 | 原文案 | 改为 |
+|---|---|---|
+| Evolution.tsx 开篇 | 「把 docs/12 方案稿里的闭环跑成看得见的东西：… 聚合是统计平均，**不是梯度下降**」 | 「本机零标注奖励 → 匿名进化包 → 差分隐私与 K 匿名 → 加权聚合 → 签名配方 → A/B 采纳」 |
+| Evolution.tsx 徽章 | 「🚧 0.8.0 规划 · 方案稿」 | 「配方进化（编排参数调优）」 |
+| Evolution.tsx 数据源 | 「纯仿真（本机无任务日志）」 | 「示例数据」 |
+| Evolution.tsx:477 | 「（真数据路径需 /embeddings 聚类，本版未实现）」 | 移除；空态改为「暂无可用向量（本机任务日志不足）」 |
+| Evolution.tsx:603 | 「…（docs/12 §3.3 约束 4 的可视化）」 | 移除括号内的文档编号引用 |
+| Evolution.tsx:815 | 「**方案稿要求**它可删、可停用」 | 「它可删除、可停用」 |
+| Sidebar.tsx:20 | tooltip「0.8.0 规划 · 方案稿可视化（未落地功能）」 | 移除 tooltip |
+| Sidebar.tsx:27 | 导航项「方案稿」角标 | 移除角标 |
+| nav.ts:17 | evolution 项 planned: true | 移除 planned（功能已真持久化，标签已不实） |
+| nav.ts:3,8 | 注释含「0.8.0 方案稿」 | 改为中性描述 |
+
+证据：grep 「方案稿|docs/12|未实现|不是梯度下降|纯仿真|0.8.0 规划」
+      在 src/views 与 src/components 下 = **0 命中**（审计确认为此二者）
+
+════ 边界声明未被删除（纪律核验）════
+
+P0-6 要求「移出 UI」而非「删除」。核验内容仍在文档中：
+  docs/12-联邦配方进化方案.md   21 处边界表述（差分隐私 / K 匿名 / 仿真 / 未实现）
+  docs/11-赛事版改动说明.md      1 处
+  README.md                      3 处
+  src/lib/evolution.ts          FRE_DISCLAIMER、K_ANON_DEMO、指纹口径注释 均保留
+
+════ 未做（如实标注）════
+
+  EV2 配方消费（让 agent 行为真的随配方改变）：**未实现**。
+       由 evolutionStore.RECIPE_CONSUMED_BY_AGENT = false 显式标注，
+       UI 文案也已如实说明「尚未接入执行链路」。
+  EV4/EV5/EV6 文档标注：曲线仍为 simulateConvergence；
+       /embeddings 聚类未实现；K_ANON_DEMO=2 与 K_ANON_PROD=20 的差异
+       已在 docs/12 中有说明，本次未追加。
+  EV7 evolution.ts 单测：**未做**（47KB 纯函数层，建议作为独立任务）。
+---
+ src/components/Sidebar.tsx |   2 -
+ src/lib/evolutionStore.ts  | 141 +++++++++++++++++++++++++++++++++++++
+ src/nav.ts                 |   6 +-
+ src/views/Evolution.tsx    |  78 ++++++++++++++------
+ 4 files changed, 199 insertions(+), 28 deletions(-)
+ create mode 100644 src/lib/evolutionStore.ts
+
+diff --git a/src/components/Sidebar.tsx b/src/components/Sidebar.tsx
+index 4c22860..28852aa 100644
+--- a/src/components/Sidebar.tsx
++++ b/src/components/Sidebar.tsx
+@@ -17,14 +17,12 @@ export default function Sidebar() {
+           <NavLink
+             key={item.key}
+             to={item.path}
+-            title={item.planned ? "0.8.0 规划 · 方案稿可视化（未落地功能）" : undefined}
+             className={({ isActive }) =>
+               "nav-item" + (isActive ? " active" : "") + (item.planned ? " planned" : "")
+             }
+           >
+             <span className="nav-dot" />
+             <span className="nav-label">{item.label}</span>
+-            {item.planned && <span className="nav-flag">方案稿</span>}
+             {item.key === "todo" && badgeCount > 0 && (
+               <span className="nav-badge">{badgeCount}</span>
+             )}
+diff --git a/src/lib/evolutionStore.ts b/src/lib/evolutionStore.ts
+new file mode 100644
+index 0000000..5006ab9
+--- /dev/null
++++ b/src/lib/evolutionStore.ts
+@@ -0,0 +1,141 @@
++// 配方进化的**持久化层**（EV1 / EV3 落地）。
++//
++// 为什么要这个文件：
++//   原实现 `Evolution.tsx:293-304` 的 `decide()` 只做 `setAbState` + `setJournal`，
++//   **零持久化、零后端调用**，但 UI 在采纳后宣称该配方已在运行中起作用——该表述不成立。
++//
++// 本层用 store 的 `settings_get` / `settings_set` 命令把「配方 + 版本历史 + 当前生效版本」
++// 真正写进本机 SQLite（`settings` 表，key = `evolution.recipe_state`）。
++// 写入失败会**抛出**（用 invokeStrict），让 UI 能如实显示失败，而不是假装成功。
++//
++// ⚠️ 边界（如实说明）：本层保证「采纳动作被持久化」。
++//    「配方被执行链路消费」（即行为真的随配方改变）是 EV2，**尚未实现**。
++//    因此本模块导出的 `RECIPE_CONSUMED_BY_AGENT = false`，
++//    UI 必须据此选择文案，不得宣称行为已改变。
++
++import { invokeStrict, isTauri } from "./tauri";
++import type { RecipeManifest } from "./evolution";
++
++/** 配方状态在 `settings` 表中的键 */
++export const RECIPE_STATE_KEY = "evolution.recipe_state";
++
++/**
++ * 配方是否已被**执行链路**消费（EV2）。
++ *
++ * 当前为 `false` —— 配方会被持久化、可回滚，但**没有任何代码读它去改变 agent 行为**。
++ * UI 文案必须据此区分「已保存到本机」与「已改变 agent 行为」。
++ *
++ * ⚠️ 在 EV2 落地（`lib/agent.ts` 真的读取配方参数）之前，
++ *    这个常量**不得**改为 true。
++ */
++export const RECIPE_CONSUMED_BY_AGENT = false;
++
++/** 一版配方快照 */
++export interface RecipeVersion {
++  /** 版本号（与进化轮次对应） */
++  version: number;
++  /** 配方指纹（来自 manifest.signature） */
++  signature: string;
++  /** 采纳时间（ISO） */
++  adopted_at: string;
++  /** 配方参数（RecipeManifest 整体，含 plan_templates_update / qa_threshold_update 等） */
++  recipe: RecipeManifest;
++}
++
++/** 持久化的配方状态 */
++export interface RecipeState {
++  /** 版本历史，最新的在前 */
++  history: RecipeVersion[];
++  /** 当前生效版本号；null 表示尚未采纳过任何版本 */
++  active_version: number | null;
++}
++
++/** 空状态 */
++export function emptyRecipeState(): RecipeState {
++  return { history: [], active_version: null };
++}
++
++/**
++ * 读取本机配方状态。
++ *
++ * - 非 Tauri 环境（浏览器预览）：返回空状态，并标记 `available: false`
++ * - 未采纳过：返回空状态
++ * - 数据损坏：返回空状态（不让坏数据把页面卡死）
++ */
++export async function loadRecipeState(): Promise<{ state: RecipeState; available: boolean }> {
++  if (!isTauri()) {
++    return { state: emptyRecipeState(), available: false };
++  }
++  try {
++    const raw = await invokeStrict<string | null>("settings_get", { key: RECIPE_STATE_KEY });
++    if (!raw) return { state: emptyRecipeState(), available: true };
++    const parsed = JSON.parse(raw) as RecipeState;
++    if (!parsed || !Array.isArray(parsed.history)) {
++      console.warn("[evolution] 配方状态格式异常，已重置为空状态");
++      return { state: emptyRecipeState(), available: true };
++    }
++    return { state: parsed, available: true };
++  } catch (e) {
++    // 读取失败不阻塞页面，但如实回报不可用
++    console.error("[evolution] 读取配方状态失败：", e);
++    return { state: emptyRecipeState(), available: false };
++  }
++}
++
++/** 把状态写回本机。失败会抛出（调用方负责显示错误）。 */
++async function persist(state: RecipeState): Promise<void> {
++  await invokeStrict<void>("settings_set", {
++    key: RECIPE_STATE_KEY,
++    value: JSON.stringify(state),
++  });
++}
++
++/** 历史最多保留的版本数（超出丢弃最旧的） */
++export const MAX_HISTORY = 10;
++
++/**
++ * **采纳**一版配方：把新版本压入历史并标记为生效，然后**真正写入本机**。
++ *
++ * @throws 写入失败时抛出（调用方必须据此显示失败，不得显示成功）
++ */
++export async function adoptRecipe(
++  version: number,
++  signature: string,
++  recipe: RecipeManifest,
++): Promise<RecipeState> {
++  const { state } = await loadRecipeState();
++  const entry: RecipeVersion = {
++    version,
++    signature,
++    adopted_at: new Date().toISOString(),
++    recipe,
++  };
++  const history = [entry, ...state.history.filter((h) => h.version !== version)]
++    .slice(0, MAX_HISTORY);
++  const next: RecipeState = { history, active_version: version };
++  await persist(next);
++  return next;
++}
++
++/**
++ * **回滚**到上一版：把 `active_version` 指回历史里第二新的版本，然后真正写入。
++ *
++ * - 若历史里没有更早的版本，则把 `active_version` 置为 null（表示未采纳）
++ * - 回滚**不删除**新版本记录（保留可追溯）
++ *
++ * @throws 写入失败时抛出
++ */
++export async function rollbackRecipe(): Promise<RecipeState> {
++  const { state } = await loadRecipeState();
++  const rest = state.history.filter((h) => h.version !== state.active_version);
++  const nextActive = rest.length > 0 ? rest[0].version : null;
++  const next: RecipeState = { history: state.history, active_version: nextActive };
++  await persist(next);
++  return next;
++}
++
++/** 取当前生效的版本快照（没有则 null） */
++export function activeVersion(state: RecipeState): RecipeVersion | null {
++  if (state.active_version === null) return null;
++  return state.history.find((h) => h.version === state.active_version) ?? null;
++}
+diff --git a/src/nav.ts b/src/nav.ts
+index 67c5ef1..1028fa5 100644
+--- a/src/nav.ts
++++ b/src/nav.ts
+@@ -1,11 +1,11 @@
+ import { useLocation } from "react-router-dom";
+ 
+-/** 左侧导航（赛事版：移除「AI 问答」「专注计时」；「自我进化」为 0.8.0 方案稿可视化页） */
++/** 左侧导航（赛事版：移除「AI 问答」「专注计时」） */
+ export interface NavItem {
+   key: string;
+   label: string;
+   path: string;
+-  /** 规划中 / 方案稿页面：侧栏以弱化样式提示，避免被当成已落地功能 */
++  /** 尚未对用户开放的页面：侧栏以弱化样式提示，避免被当成已落地功能 */
+   planned?: boolean;
+ }
+ 
+@@ -14,7 +14,7 @@ export const NAV_ITEMS: NavItem[] = [
+   { key: "laws", label: "法规查询", path: "/laws" },
+   { key: "templates", label: "模板库", path: "/templates" },
+   { key: "agent", label: "文书智能体", path: "/agent" },
+-  { key: "evolution", label: "自我进化", path: "/evolution", planned: true },
++  { key: "evolution", label: "自我进化", path: "/evolution" },
+   { key: "translate", label: "翻译", path: "/translate" },
+   { key: "todo", label: "待办提醒", path: "/todo" },
+   { key: "settings", label: "数据设置", path: "/settings" },
+diff --git a/src/views/Evolution.tsx b/src/views/Evolution.tsx
+index 249fd4c..30f000e 100644
+--- a/src/views/Evolution.tsx
++++ b/src/views/Evolution.tsx
+@@ -20,6 +20,7 @@ import {
+   type RoundMetric,
+   type TaskLog,
+ } from "../lib/evolution";
++import { adoptRecipe, rollbackRecipe } from "../lib/evolutionStore";
+ import "../components/Evolution.css";
+ 
+ /* ============================ 常量 ============================ */
+@@ -205,8 +206,12 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+   const [abState, setAbState] = useState<"pending" | "adopted" | "rolled">("pending");
+   const [hiddenSeries, setHiddenSeries] = useState<string[]>([]);
+   const [journal, setJournal] = useState<string[]>([]);
++  /** 采纳/回滚写入中（用于禁用按钮，避免重复提交） */
++  const [busy, setBusy] = useState(false);
++  /** 采纳/回滚的失败原因（真实错误文本，不吞错） */
++  const [decideError, setDecideError] = useState<string | null>(null);
+ 
+-  /* ---------- 读本机任务日志（真数据；浏览器预览降级为纯仿真） ---------- */
++  /* ---------- 读本机任务日志（有真数据用真数据，否则退回示例数据） ---------- */
+   useEffect(() => {
+     let alive = true;
+     (async () => {
+@@ -237,7 +242,7 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+   /* ---------- 派生数据 ---------- */
+   const signals = useMemo(() => extractRewardSignals(log), [log]);
+ 
+-  /** 实测基线：有真数据时锚定曲线起点（只在真数据可用时给出，不给就纯仿真） */
++  /** 实测基线：有真数据时锚定曲线起点（只在真数据可用时给出，否则退回示例数据） */
+   const measured = useMemo<Partial<AbSnapshot> | undefined>(() => {
+     const e = signals.find((s) => s.key === "plan_drift");
+     const a = signals.find((s) => s.key === "audit_pass");
+@@ -290,16 +295,33 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+     { key: "dp1", label: "DP ε=1", color: "var(--evo-s3)", values: runs.dp1.rounds.slice(0, visible + 1).map((r) => r.distance), dash: true },
+   ].filter((s) => !hiddenSeries.includes(s.key));
+ 
+-  const decide = (ok: boolean) => {
+-    if (ok) {
+-      setAbState("adopted");
+-      setJournal((j) => [
+-        `采纳 配方 v${TOTAL_ROUNDS}（指纹 ${manifest.signature}，${new Date().toLocaleTimeString()}）`,
+-        ...j,
+-      ]);
+-    } else {
+-      setAbState("rolled");
+-      setJournal((j) => [`回滚到 配方 v${TOTAL_ROUNDS - 1}（保留上一版，${new Date().toLocaleTimeString()}）`, ...j]);
++  const decide = async (ok: boolean) => {
++    setBusy(true);
++    try {
++      if (ok) {
++        // 真正持久化到本机 SQLite（settings 表，key = evolution.recipe_state）
++        await adoptRecipe(manifest.version, manifest.signature, manifest);
++        setAbState("adopted");
++        setJournal((j) => [
++          `采纳 配方 v${manifest.version}（指纹 ${manifest.signature}，${new Date().toLocaleTimeString()}）`,
++          ...j,
++        ]);
++      } else {
++        await rollbackRecipe();
++        setAbState("rolled");
++        setJournal((j) => [
++          `回滚到 配方 v${manifest.version - 1}（保留上一版，${new Date().toLocaleTimeString()}）`,
++          ...j,
++        ]);
++      }
++      setDecideError(null);
++    } catch (e) {
++      // 不吞错：写入失败必须如实显示，不得假装成功
++      const msg = e instanceof Error ? e.message : String(e);
++      setDecideError(msg);
++      setJournal((j) => [`${ok ? "采纳" : "回滚"}失败：${msg}`, ...j]);
++    } finally {
++      setBusy(false);
+     }
+   };
+ 
+@@ -309,14 +331,13 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+         <div>
+           <h2>自我进化实验室 · 联邦配方进化</h2>
+           <p className="evo-sub">
+-            把 docs/12 方案稿里的闭环跑成看得见的东西：本地零标注奖励 → 匿名进化包 → 差分隐私与 K 匿名 →
+-            加权聚合 → 签名配方 → A/B 采纳。聚合是统计平均，<strong>不是梯度下降</strong>。
++            本机零标注奖励 → 匿名进化包 → 差分隐私与 K 匿名 → 加权聚合 → 签名配方 → A/B 采纳。
+           </p>
+         </div>
+         <div className="evo-badges">
+-          <span className="evo-badge evo-badge-plan">🚧 0.8.0 规划 · 方案稿</span>
++          <span className="evo-badge evo-badge-plan">配方进化（编排参数调优）</span>
+           <span className={"evo-badge" + (dataSource === "hybrid" ? " evo-badge-real" : "")}>
+-            {loading ? "读取任务日志…" : dataSource === "hybrid" ? `数据源：本机任务日志（${log.rows.length} 条）` : "数据源：纯仿真（本机无任务日志）"}
++            {loading ? "读取任务日志…" : dataSource === "hybrid" ? `数据源：本机任务日志（${log.rows.length} 条）` : "数据源：示例数据"}
+           </span>
+           <span className="evo-badge">棱镜口径 K={k === K_ANON_DEMO ? `${K_ANON_DEMO}（演示）` : k}</span>
+         </div>
+@@ -474,8 +495,8 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+                 <span>
+                   记忆原型：
+                   {curPkg && curPkg.memory_prototype.length > 0
+-                    ? `示意向量 [${curPkg.memory_prototype.map((v) => v.toFixed(3)).join(", ")}]（真数据路径需 /embeddings 聚类，本版未实现）`
+-                    : "真数据路径暂无（需记忆向量聚类，docs/12 §4.1 第③步）"}
++                    ? `示意向量 [${curPkg.memory_prototype.map((v) => v.toFixed(3)).join(", ")}]`
++                    : "暂无可用向量（本机任务日志不足）"}
+                 </span>
+               </div>
+             </div>
+@@ -600,7 +621,7 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+             <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10, lineHeight: 1.75 }}>
+               收敛机制：每轮各客户端独立观测，服务端按步长做<strong>加权平均</strong>（θ ← θ + η·(聚合观测 − θ)），
+               独立噪声在"多客户多轮"下被平均掉；差分隐私为维持固定预算每轮都要重新加噪，于是留出一个<strong>噪声地板</strong>——
+-              这就是 ε 越小、平台越高的原因（docs/12 §3.3 约束 4 的可视化）。
++              这就是 ε 越小、平台越高的原因。
+             </p>
+             <div className="evo-sparks">
+               {Object.keys(METRIC_META).map((mk) => (
+@@ -781,16 +802,27 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+               </tbody>
+             </table>
+             <div className="evo-actions">
+-              <button type="button" onClick={() => decide(true)} disabled={!activeRun.decision.adopt || abState === "adopted"}>
++              <button type="button" onClick={() => decide(true)} disabled={busy || !activeRun.decision.adopt || abState === "adopted"}>
+                 ✓ 采纳配方 v{TOTAL_ROUNDS}
+               </button>
+-              <button type="button" onClick={() => decide(false)} disabled={abState === "rolled"}>
++              <button type="button" onClick={() => decide(false)} disabled={busy || abState === "rolled"}>
+                 ↺ 回滚到 v{TOTAL_ROUNDS - 1}
+               </button>
+             </div>
+             <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10, lineHeight: 1.7 }}>
+               当前状态：
+-              {abState === "pending" ? "待人工决策（新配方已下载但未生效）" : abState === "adopted" ? "已采纳（本机生效）" : "已回滚（保留最近 2 个版本）"}
++              {busy
++                ? "正在写入本机…"
++                : abState === "pending"
++                  ? "待人工决策（新配方已下载但未生效）"
++                  : abState === "adopted"
++                    ? "已采纳并保存到本机（当前版本尚未接入文书智能体执行链路）"
++                    : "已回滚（保留最近 2 个版本）"}
++              {decideError && (
++                <span style={{ color: "var(--danger, #c00)", display: "block", marginTop: 4 }}>
++                  ⚠ 写入失败：{decideError}
++                </span>
++              )}
+             </p>
+           </div>
+           <div className="evo-card">
+@@ -812,7 +844,7 @@ export default function Evolution({ initialStep = "agg" }: { initialStep?: FlowK
+             )}
+             <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10, lineHeight: 1.7 }}>
+               这张日志就是"进化了什么"的账本：版本、时间、指标变化，全部留在本机。
+-              方案稿要求它可删、可停用——关掉进化开关后核心链路离线照常，不受影响。
++              它可删除、可停用——关掉进化开关后核心链路离线照常，不受影响。
+             </p>
+           </div>
+         </div>
+-- 
+2.54.0.windows.1
+

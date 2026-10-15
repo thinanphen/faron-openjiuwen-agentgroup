@@ -251,46 +251,78 @@ python run_online.py           # 由 6 个成员自主完成一次委托
 
 ```
 faron-openjiuwen-agentgroup/
-├── README.md                     ← 本文件
-├── LICENSE                       Apache-2.0（与 openJiuwen 生态一致）
+├── 接手必读.md                    ★ 同伴与同伴的 AI 优先读（现状/差距/待办）
+├── AI工作须知.md                  ★ 给 AI：布局/技术事实/硬性纪律/验证命令
+├── 任务台账.md                    ★ 工单交换板（领活/交活/下指令）
+├── README.md                      ← 本文件
+├── LICENSE                        Apache-2.0（与 openJiuwen 生态一致）
 ├── requirements.txt
 ├── .gitignore  .gitattributes  .env.example  conftest.py
 │
-├── docs/                         ★ 评估、方案与实现说明
-│   ├── 01-贴合度评估与整改建议.md   11 项整改清单（G1–G12）+ 17 天路线图
-│   ├── 02-源码级复核补充.docx      源码级复核发现的 2 个上游问题
-│   ├── 03-AgentGroup方案.md       框架设计 / 通信协议 / 接口定义 / 模型选型
-│   └── 04-AgentGroup实现说明.md
+├── 提交包/                        ★ 官方六项清单归档
+│   ├── README.md                  六项对位表 + 一页纸叙事 + 最短验证路径
+│   ├── 01-作品名称.md
+│   ├── 02-项目简介.md
+│   ├── 03-应用场景说明.md
+│   ├── 04-技术方案.md              架构 / 6 成员 / 组件两表 / 两段自检 / 运行层现状
+│   ├── 05-DEMO演示视频.md          ⚠️ 待制作（现 7:13，超 2.4 倍）
+│   └── 06-项目文档.md              项目文档索引 + 待补齐项
 │
-├── src/faron_agentgroup/         ★ Agent Group 实现
+├── docs/                          ★ 评估、方案与实现说明
+│   ├── 01-贴合度评估与整改建议.md   12 项整改清单（G1–G12）+ 17 天路线图
+│   ├── 02-源码级复核补充.docx       源码级复核发现的上游问题
+│   ├── 03-AgentGroup方案.md        框架设计 / 通信协议 / 接口定义 / 模型选型
+│   ├── 04-AgentGroup实现说明.md
+│   ├── 05-零Key复现路径.md         哪部分零依赖可复现、哪部分需要框架
+│   ├── 06-进度与交接记录.md        逐项验收证据（证据流水，非接手入口）
+│   └── 07-JiuwenSwarm接入评估.md   JiuwenSwarm/SkillHub 评估与未验证项
+│
+├── src/faron_agentgroup/          ★ Agent Group 实现
 │   ├── __init__.py
-│   ├── citation.py               引用解析 + 两段自检（逐条对齐 agent.ts）
-│   ├── kg.py                     知识图谱（对齐 db.rs 种子与 kg.ts）
-│   ├── tools_legal.py            法库 + 官方 5 个工具
-│   ├── audit.py                  两段自检与图谱工具（Agent 可调用）
-│   ├── config.py                 模型池 / 5 类任务 / 四角色提示词
-│   └── group.py                  Agent Group 规格装配 + 门面
+│   ├── citation.py                引用解析 + 两段自检（逐条对齐 agent.ts）
+│   ├── kg.py                      知识图谱（对齐 db.rs 种子与 kg.ts）
+│   ├── tools_legal.py             法库 + 官方 12 个工具
+│   ├── audit.py                   两段自检与图谱工具（Agent 可调用）
+│   ├── config.py                  模型池 / 5 类任务 / 四角色提示词
+│   └── group.py                   Agent Group 规格装配 + 门面
 │
-├── tests/test_citation_audit.py  24 组测试向量
-├── probe_build.py                最小构建探针
-├── run_offline_demo.py           端到端演示（不需要模型）
-├── run_online.py                 在线运行（需要模型）
-├── runtime/                      产出：交付物 .docx + 取证日志 .json
+├── tests/                         ★ 40 组验证
+│   ├── test_citation_audit.py     31 组测试向量（自动发现）
+│   ├── test_assembly.py           9 组装配防线（E1 回归）
+│   └── verify_zero_dep.py         零依赖验证（屏蔽全部框架 import）
+├── probe_build.py                 最小构建探针（逐成员 spec 解析）
+├── run_offline_demo.py            端到端演示（不需要模型）
+├── run_online.py                  在线运行（需要模型）
+├── runtime/                       产出：交付物 .docx + 取证日志 .json
+│
+├── skill/citation-audit/          ★ 零依赖 Skill 包（SkillHub 可分发）
+│   ├── SKILL.md                   触发词 / 参数 / 返回 / 已知边界
+│   └── scripts/
+│       ├── audit_citations.py     自包含 CLI（零三方依赖）
+│       └── verify_no_deps.py      零依赖自验证
+│
+├── 交付补丁/                       ★ Legal-Workspace 的 3 个提交补丁（D9：无 BOM）
+│   ├── 0001-fix-P0-6-P0-7-UI.patch
+│   ├── 0002-test-EV7-evolution.ts-41-jsonBytes.patch
+│   ├── 0003-feat-EV2.patch
+│   ├── 改动概览.txt
+│   └── recipe.ts / recipe.test.ts / evolutionStore.ts / evolution.test.ts
 │
 ├── 资料/                          ★ 参赛材料（提交包整理版）
-│   ├── README.md                 材料导航
-│   ├── 大文件说明.md              两个超限大文件的 SHA256 与获取方式
-│   ├── README-评委先读.md          建议最先读
-│   ├── 01-演示视频-分镜与素材/      分镜 + 3套字幕 + 2套配音稿 + 品牌素材
+│   ├── README.md                  材料导航
+│   ├── 版本清单.json               ★ 校验值单一来源（各文档引用此处）
+│   ├── 大文件说明.md               两个超限大文件的体积、校验值与获取方式
+│   ├── README-评委先读.md           建议最先读
+│   ├── 01-演示视频-分镜与素材/       分镜 + 3套字幕 + 2套配音稿 + 品牌素材
 │   ├── 02-产品介绍PPT/
 │   ├── 03-项目计划书/
-│   ├── 04-产品演示站/              demo.html（单文件零依赖，双击离线可开）
+│   ├── 04-产品演示站/               demo.html（单文件零依赖，双击离线可开）
 │   ├── 05-移动端与安装说明/
-│   └── 06-用户调研/                107 份问卷 + 结果 PDF
+│   └── 06-用户调研/                 107 份问卷 + 结果 PDF
 │
 └── 源码/                          ★ 上游内部文档与仓库元信息
-    ├── README.md                 文档导航 + 对齐依据说明
-    ├── Legal-Workspace/          上游 README / CHANGELOG / package.json
+    ├── README.md                  文档导航 + 对齐依据说明
+    ├── Legal-Workspace/           上游 README / CHANGELOG / package.json
     └── Legal-Workspace-docs/      docs/01–12 内部文档（技术架构/数据库/路线图/联邦配方进化）
 ```
 
@@ -318,15 +350,48 @@ git push
 
 ## 测试覆盖
 
+> 数字由 `tests/test_citation_audit.py` 的自动发现结果回跑取得（纪律 **D10**：
+> 任何数字类断言改完必须回跑取真值，不得沿用旧文）。
+> 分组登记数与自动发现数在运行器里**互相断言**，不一致会直接红。
+
+### `tests/test_citation_audit.py` —— 31 组
+
 | 组 | 用例数 | 内容 |
 |---|---|---|
-| 一、token 抽取 | 5 | 中日文条号 / 日文 `の·之·ノ` 分条 / 美国法典 `§NN` 变体 / 去重保序 / 边界 |
-| 二、覆盖判定 | 2 | 归一化 / 前缀覆盖语义 |
-| 三、第一段自检 | 7 | 正向 / **反例点名** / 美国法典反例 / 官方粒度 / 部分命中 / 确定性 / 零返回 |
-| 四、第二段自检 | 3 | `sameLaw` / 在范围与超范围 / 未命中案由跳过 |
+| 一、token 抽取 | 5 | 中日文条号 / 日文 `の·之·ノ` 分条 / 美国法典 `§NN` 变体（**含 G11 字母款项修订**）/ 去重保序 / 边界 |
+| 二、覆盖判定 | 4 | 归一化 / 前缀覆盖语义 / **E9 前缀收紧 9 组** / 候选单元生成 |
+| 三、第一段自检 | 10 | 正向 / **反例点名** / 美国法典反例 / **G11 款项区分** / 款项独立判定 / 前缀用途保留 / 部分命中 / 确定性 / 零返回 / **E3 登记时序** |
+| 四、第二段自检 | 4 | `sameLaw` / 在范围与超范围 / 未命中案由跳过 / **E11 两侧断言** |
 | 五、知识图谱 | 6 | 种子案由 / 案由匹配 / 骨架结构 / **法条节点无条号约束** / 候选边确认 / 候选边拒绝 |
 | 六、端到端 | 1 | 图谱 → 检索 → 起草 → 两段自检 |
-| **合计** | **24** | |
+| 七、可复现性 | 1 | **E5** 跨进程 `Article.id` 稳定（三种 hash seed） |
+| **小计** | **31** | |
+
+### `tests/test_assembly.py` —— 9 组（E1 回归防线）
+
+| 组 | 用例数 | 内容 |
+|---|---|---|
+| 装配正确性 | 9 | `agents` 字典完备性 / 逐成员 spec 解析 / 无共享 spec 对象 / prompt 隔离 / 动态兜底 / HITL 一致性 / 保留名 / JSON 往返 / 自动发现自检 |
+| **小计** | **9** | |
+
+### `tests/verify_zero_dep.py` —— 6 项
+
+| 项 | 内容 |
+|---|---|
+| 零依赖验证 | 按文件路径加载两个纯函数模块 / 图谱可用 / 第一段自检 / 第二段自检 / 报告渲染 / **断言全程零框架 import** |
+
+### 合计
+
+| 套件 | 用例数 |
+|---|---|
+| `test_citation_audit.py` | 31 |
+| `test_assembly.py` | 9 |
+| `verify_zero_dep.py`（检查项） | 6 |
+| **合计** | **46** |
+
+> **另有一侧**：`Legal-Workspace`（TypeScript）有 **74 组**（`vitest`），
+> 见该仓库 `tests/evolution.test.ts`（41）与 `tests/recipe.test.ts`（33）。
+> 两侧合计 **120 组**。
 
 ---
 

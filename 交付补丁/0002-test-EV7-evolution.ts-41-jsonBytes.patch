@@ -1,0 +1,980 @@
+From 20a3d967dd04d32618ae1831407a1fe7e2a39ccd Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Thu, 15 Oct 2026 15:16:32 +0800
+Subject: [PATCH 2/3] =?utf-8?q?test(EV7):=20=E4=B8=BA=20evolution.ts=20?=
+ =?utf-8?q?=E8=A1=A5=E5=8D=95=E6=B5=8B=EF=BC=8841=20=E7=BB=84=EF=BC=89+=20?=
+ =?utf-8?q?=E4=BF=AE=20jsonBytes=20=E4=B8=A4=E5=A4=84=E7=BC=BA=E9=99=B7?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+审计 P1-7 / EV7 指出：`src/lib/evolution.ts` 是 47KB 纯函数层却**零单测**，
+而这恰是最容易测、最能证明严谨性的部分。本提交补齐。
+
+════ 新增 tests/evolution.test.ts（41 组用例）════
+
+覆盖审计点名的五组，外加聚合权重与边界：
+
+| 组 | 用例数 | 关键断言 |
+|---|---|---|
+| 伪随机与噪声 | 5 | 同 seed 同序列；不同 seed 不同；值域 [0,1)；laplace scale 越大波动越大 |
+| 差分隐私 applyDpNoise | 7 | 输出保持键集、计数为夹到非负的整数；同 rng 可复现；ε 越小噪声越大；ε≤0 按下限 0.05 处理；无副作用 |
+| K 匿名 kAnonymityFilter | 5 | sample_n < K 的包被丢弃并附原因；>= K 保留；**K=20 比 K=2 更严格**；边界恰等于 K；回显 K |
+| 白名单 whitelistViolations | 4 | 干净对象无违规；命中禁用字段报告路径（以 `$` 开头）；数组元素也检查 |
+| 指纹 fingerprint | 4 | 确定性；不同输入不同指纹；空串稳定；中文稳定 |
+| **采纳判定 evaluateAdoption** | 8 | **四项全改善才采纳**；仅 1 项改善**不采纳**（要求 ≥2 项同向）；容忍度内不判回归；超容忍度拒绝；**★任一指标显著回归即整体拒绝**；纯函数 |
+| 聚合权重 weightOf | 6 | 样本量/通过率单调增；陈旧衰减；通过率为 0 保留 0.2 地板；负样本量夹到 0；负 ageDays 夹到 0 |
+| 辅助纯函数 jsonBytes | 3 | UTF-8 字节数；中文 3 字节；**循环引用不抛异常** |
+
+**测试过程中读出的三处真实语义**（原实现与我最初猜测不同，均已按实际对齐）：
+  1. `applyDpNoise(counts: Record<string,number>, epsilon, rng)` —— 输入是**计数字典**，
+     不是向量；输出为「加噪 → 取整 → 夹到 >=0」的计数字典。
+  2. `evaluateAdoption` 的采纳条件是
+     `adopt = (无任何指标显著回归) AND (同向改善指标数 >= 2)`
+     —— **同理只改一项不足以采纳**，这是重要防误采纳设计。
+  3. 回归阈值是**乘性**的：`b < a*(1-tolerance)`，而非差值。
+
+════ 修 src/lib/evolution.ts · jsonBytes 的两处真实缺陷 ════
+
+单测发现（非猜测，由断言触发）：
+
+缺陷 1 · 循环引用抛异常
+    原实现 `const s = JSON.stringify(v);` —— 遇到循环结构直接抛 TypeError。
+    `jsonBytes` 被用于计算进化包体积（`size_bytes`），一旦上游对象出现环就会崩。
+    修为 try/catch 返回 0，把「不可测量」与「0 字节」都交给调用方判断。
+
+缺陷 2 · 非 BMP 字符字节数低估
+    原实现 `n += ch.codePointAt(0)! > 0x7f ? 3 : 1`
+    —— 把一切非 ASCII 都按 3 字节算，漏掉 4 字节的补充平面字符（emoji 等）。
+    修为按 UTF-8 真实宽度 1/2/3/4 分档。
+
+════ 工程化 ════
+
+- package.json 新增 `test` / `test:watch` 脚本
+- devDependencies 新增 `vitest@^2.1.9`
+  （**特意选 2.x**：vitest 5 要求 vite>=6，而本项目是 vite 5.4，
+   用 --legacy-peer-deps 强装会造成版本不匹配，故降级到兼容版本）
+
+════ 验证证据 ════
+
+    npm test
+      Test Files  1 passed (1)
+      Tests       41 passed (41)
+
+    npm run build
+      ✓ 79 modules transformed
+      exit=0
+
+（build 产物 319.60 kB，较改动前 +0.09 kB，来自 jsonBytes 的字节宽度分支）
+---
+ package-lock.json       | 405 +++++++++++++++++++++++++++++++++++++++-
+ package.json            |   5 +-
+ src/lib/evolution.ts    |  17 +-
+ tests/evolution.test.ts | 344 ++++++++++++++++++++++++++++++++++
+ 4 files changed, 767 insertions(+), 4 deletions(-)
+ create mode 100644 tests/evolution.test.ts
+
+diff --git a/package-lock.json b/package-lock.json
+index 99742b8..71a2aeb 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -19,7 +19,8 @@
+         "@types/react-dom": "^18.3.0",
+         "@vitejs/plugin-react": "^4.3.0",
+         "typescript": "^5.5.0",
+-        "vite": "^5.4.0"
++        "vite": "^5.4.0",
++        "vitest": "^2.1.9"
+       }
+     },
+     "node_modules/@babel/code-frame": {
+@@ -1416,6 +1417,129 @@
+         "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+       }
+     },
++    "node_modules/@vitest/expect": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/@vitest/expect/-/expect-2.1.9.tgz",
++      "integrity": "sha512-UJCIkTBenHeKT1TTlKMJWy1laZewsRIzYighyYiJKZreqtdxSos/S1t+ktRMQWu2CKqaarrkeszJx1cgC5tGZw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@vitest/spy": "2.1.9",
++        "@vitest/utils": "2.1.9",
++        "chai": "^5.1.2",
++        "tinyrainbow": "^1.2.0"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      }
++    },
++    "node_modules/@vitest/mocker": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/@vitest/mocker/-/mocker-2.1.9.tgz",
++      "integrity": "sha512-tVL6uJgoUdi6icpxmdrn5YNo3g3Dxv+IHJBr0GXHaEdTcw3F+cPKnsXFhli6nO+f/6SDKPHEK1UN+k+TQv0Ehg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@vitest/spy": "2.1.9",
++        "estree-walker": "^3.0.3",
++        "magic-string": "^0.30.12"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      },
++      "peerDependencies": {
++        "msw": "^2.4.9",
++        "vite": "^5.0.0"
++      },
++      "peerDependenciesMeta": {
++        "msw": {
++          "optional": true
++        },
++        "vite": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@vitest/pretty-format": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/@vitest/pretty-format/-/pretty-format-2.1.9.tgz",
++      "integrity": "sha512-KhRIdGV2U9HOUzxfiHmY8IFHTdqtOhIzCpd8WRdJiE7D/HUcZVD0EgQCVjm+Q9gkUXWgBvMmTtZgIG48wq7sOQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "tinyrainbow": "^1.2.0"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      }
++    },
++    "node_modules/@vitest/runner": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/@vitest/runner/-/runner-2.1.9.tgz",
++      "integrity": "sha512-ZXSSqTFIrzduD63btIfEyOmNcBmQvgOVsPNPe0jYtESiXkhd8u2erDLnMxmGrDCwHCCHE7hxwRDCT3pt0esT4g==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@vitest/utils": "2.1.9",
++        "pathe": "^1.1.2"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      }
++    },
++    "node_modules/@vitest/snapshot": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/@vitest/snapshot/-/snapshot-2.1.9.tgz",
++      "integrity": "sha512-oBO82rEjsxLNJincVhLhaxxZdEtV0EFHMK5Kmx5sJ6H9L183dHECjiefOAdnqpIgT5eZwT04PoggUnW88vOBNQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@vitest/pretty-format": "2.1.9",
++        "magic-string": "^0.30.12",
++        "pathe": "^1.1.2"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      }
++    },
++    "node_modules/@vitest/spy": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/@vitest/spy/-/spy-2.1.9.tgz",
++      "integrity": "sha512-E1B35FwzXXTs9FHNK6bDszs7mtydNi5MIfUWpceJ8Xbfb1gBMscAnwLbEu+B44ed6W3XjL9/ehLPHR1fkf1KLQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "tinyspy": "^3.0.2"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      }
++    },
++    "node_modules/@vitest/utils": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/@vitest/utils/-/utils-2.1.9.tgz",
++      "integrity": "sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@vitest/pretty-format": "2.1.9",
++        "loupe": "^3.1.2",
++        "tinyrainbow": "^1.2.0"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      }
++    },
++    "node_modules/assertion-error": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/assertion-error/-/assertion-error-2.0.1.tgz",
++      "integrity": "sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=12"
++      }
++    },
+     "node_modules/baseline-browser-mapping": {
+       "version": "2.11.20",
+       "resolved": "https://registry.npmmirror.com/baseline-browser-mapping/-/baseline-browser-mapping-2.11.20.tgz",
+@@ -1461,6 +1585,16 @@
+         "node": "^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7"
+       }
+     },
++    "node_modules/cac": {
++      "version": "6.7.14",
++      "resolved": "https://registry.npmjs.org/cac/-/cac-6.7.14.tgz",
++      "integrity": "sha512-b6Ilus+c3RrdDk+JhLKUAQfzzgLEPy6wcXqS7f/xe1EETvsDP6GORG7SFuOs6cID5YkqchW/LXZbX5bc8j7ZcQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/caniuse-lite": {
+       "version": "1.0.30001810",
+       "resolved": "https://registry.npmmirror.com/caniuse-lite/-/caniuse-lite-1.0.30001810.tgz",
+@@ -1481,6 +1615,33 @@
+         }
+       ]
+     },
++    "node_modules/chai": {
++      "version": "5.3.3",
++      "resolved": "https://registry.npmjs.org/chai/-/chai-5.3.3.tgz",
++      "integrity": "sha512-4zNhdJD/iOjSH0A05ea+Ke6MU5mmpQcbQsSOkgdaUMJ9zTlDTD/GYlwohmIE2u0gaxHYiVHEn1Fw9mZ/ktJWgw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "assertion-error": "^2.0.1",
++        "check-error": "^2.1.1",
++        "deep-eql": "^5.0.1",
++        "loupe": "^3.1.0",
++        "pathval": "^2.0.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/check-error": {
++      "version": "2.1.3",
++      "resolved": "https://registry.npmjs.org/check-error/-/check-error-2.1.3.tgz",
++      "integrity": "sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 16"
++      }
++    },
+     "node_modules/convert-source-map": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmmirror.com/convert-source-map/-/convert-source-map-2.0.0.tgz",
+@@ -1510,12 +1671,29 @@
+         }
+       }
+     },
++    "node_modules/deep-eql": {
++      "version": "5.0.2",
++      "resolved": "https://registry.npmjs.org/deep-eql/-/deep-eql-5.0.2.tgz",
++      "integrity": "sha512-h5k/5U50IJJFpzfL6nO9jaaumfjO/f2NjK/oYB2Djzm4p9L+3T9qWpZqZ2hAbLPuuYq9wrU08WQyBTL5GbPk5Q==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=6"
++      }
++    },
+     "node_modules/electron-to-chromium": {
+       "version": "1.5.417",
+       "resolved": "https://registry.npmmirror.com/electron-to-chromium/-/electron-to-chromium-1.5.417.tgz",
+       "integrity": "sha512-4T+DTDWuMPM4aHlHwWdAVCVWwp7LDilnhzkj+c/Lbj91XSQrLuOmZSLtS9Q4iIqjlPUbPOnC624zDVVHCHaolQ==",
+       "dev": true
+     },
++    "node_modules/es-module-lexer": {
++      "version": "1.7.0",
++      "resolved": "https://registry.npmjs.org/es-module-lexer/-/es-module-lexer-1.7.0.tgz",
++      "integrity": "sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/esbuild": {
+       "version": "0.21.5",
+       "resolved": "https://registry.npmmirror.com/esbuild/-/esbuild-0.21.5.tgz",
+@@ -1563,6 +1741,26 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/estree-walker": {
++      "version": "3.0.3",
++      "resolved": "https://registry.npmjs.org/estree-walker/-/estree-walker-3.0.3.tgz",
++      "integrity": "sha512-7RUKfXgSMMkzt6ZuXmqapOurLGPPfgj6l9uRZ7lRGolvk0y2yocc35LdcxKC5PQZdn2DMqioAQ2NoWcrTKmm6g==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree": "^1.0.0"
++      }
++    },
++    "node_modules/expect-type": {
++      "version": "1.4.0",
++      "resolved": "https://registry.npmjs.org/expect-type/-/expect-type-1.4.0.tgz",
++      "integrity": "sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "engines": {
++        "node": ">=12.0.0"
++      }
++    },
+     "node_modules/fsevents": {
+       "version": "2.3.3",
+       "resolved": "https://registry.npmmirror.com/fsevents/-/fsevents-2.3.3.tgz",
+@@ -1626,6 +1824,13 @@
+         "loose-envify": "cli.js"
+       }
+     },
++    "node_modules/loupe": {
++      "version": "3.2.1",
++      "resolved": "https://registry.npmjs.org/loupe/-/loupe-3.2.1.tgz",
++      "integrity": "sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/lru-cache": {
+       "version": "5.1.1",
+       "resolved": "https://registry.npmmirror.com/lru-cache/-/lru-cache-5.1.1.tgz",
+@@ -1635,6 +1840,16 @@
+         "yallist": "^3.0.2"
+       }
+     },
++    "node_modules/magic-string": {
++      "version": "0.30.21",
++      "resolved": "https://registry.npmjs.org/magic-string/-/magic-string-0.30.21.tgz",
++      "integrity": "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@jridgewell/sourcemap-codec": "^1.5.5"
++      }
++    },
+     "node_modules/ms": {
+       "version": "2.1.3",
+       "resolved": "https://registry.npmmirror.com/ms/-/ms-2.1.3.tgz",
+@@ -1668,6 +1883,23 @@
+         "node": ">=18"
+       }
+     },
++    "node_modules/pathe": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/pathe/-/pathe-1.1.2.tgz",
++      "integrity": "sha512-whLdWMYL2TwI08hn8/ZqAbrVemu0LNaNNJZX73O6qaIdCTfXutsLhMkjdENX0qhsQ9uIimo4/aQOmXkoon2nDQ==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/pathval": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/pathval/-/pathval-2.0.1.tgz",
++      "integrity": "sha512-//nshmD55c46FuFw26xV/xFAaB5HF9Xdap7HJBBnrKdAd6/GxDBaNA1870O79+9ueg61cZLSVc+OaFlfmObYVQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 14.16"
++      }
++    },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmmirror.com/picocolors/-/picocolors-1.1.1.tgz",
+@@ -1826,6 +2058,13 @@
+         "semver": "bin/semver.js"
+       }
+     },
++    "node_modules/siginfo": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/siginfo/-/siginfo-2.0.0.tgz",
++      "integrity": "sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==",
++      "dev": true,
++      "license": "ISC"
++    },
+     "node_modules/source-map-js": {
+       "version": "1.2.1",
+       "resolved": "https://registry.npmmirror.com/source-map-js/-/source-map-js-1.2.1.tgz",
+@@ -1835,6 +2074,64 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/stackback": {
++      "version": "0.0.2",
++      "resolved": "https://registry.npmjs.org/stackback/-/stackback-0.0.2.tgz",
++      "integrity": "sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/std-env": {
++      "version": "3.10.0",
++      "resolved": "https://registry.npmjs.org/std-env/-/std-env-3.10.0.tgz",
++      "integrity": "sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/tinybench": {
++      "version": "2.9.0",
++      "resolved": "https://registry.npmjs.org/tinybench/-/tinybench-2.9.0.tgz",
++      "integrity": "sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/tinyexec": {
++      "version": "0.3.2",
++      "resolved": "https://registry.npmjs.org/tinyexec/-/tinyexec-0.3.2.tgz",
++      "integrity": "sha512-KQQR9yN7R5+OSwaK0XQoj22pwHoTlgYqmUscPYoknOoWCWfj/5/ABTMRi69FrKU5ffPVh5QcFikpWJI/P1ocHA==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/tinypool": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/tinypool/-/tinypool-1.1.1.tgz",
++      "integrity": "sha512-Zba82s87IFq9A9XmjiX5uZA/ARWDrB03OHlq+Vw1fSdt0I+4/Kutwy8BP4Y/y/aORMo61FQ0vIb5j44vSo5Pkg==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": "^18.0.0 || >=20.0.0"
++      }
++    },
++    "node_modules/tinyrainbow": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/tinyrainbow/-/tinyrainbow-1.2.0.tgz",
++      "integrity": "sha512-weEDEq7Z5eTHPDh4xjX789+fHfF+P8boiFB+0vbWzpbnbsEr/GRaohi/uMKxg8RZMXnl1ItAi/IUHWMsjDV7kQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=14.0.0"
++      }
++    },
++    "node_modules/tinyspy": {
++      "version": "3.0.2",
++      "resolved": "https://registry.npmjs.org/tinyspy/-/tinyspy-3.0.2.tgz",
++      "integrity": "sha512-n1cw8k1k0x4pgA2+9XrOkFydTerNcJ1zWCO5Nn9scWHTD+5tp8dghT2x1uduQePZTZgd3Tupf+x9BxJjeJi77Q==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=14.0.0"
++      }
++    },
+     "node_modules/typescript": {
+       "version": "5.9.3",
+       "resolved": "https://registry.npmmirror.com/typescript/-/typescript-5.9.3.tgz",
+@@ -1937,6 +2234,112 @@
+         }
+       }
+     },
++    "node_modules/vite-node": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/vite-node/-/vite-node-2.1.9.tgz",
++      "integrity": "sha512-AM9aQ/IPrW/6ENLQg3AGY4K1N2TGZdR5e4gu/MmmR2xR3Ll1+dib+nook92g4TV3PXVyeyxdWwtaCAiUL0hMxA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "cac": "^6.7.14",
++        "debug": "^4.3.7",
++        "es-module-lexer": "^1.5.4",
++        "pathe": "^1.1.2",
++        "vite": "^5.0.0"
++      },
++      "bin": {
++        "vite-node": "vite-node.mjs"
++      },
++      "engines": {
++        "node": "^18.0.0 || >=20.0.0"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      }
++    },
++    "node_modules/vitest": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/vitest/-/vitest-2.1.9.tgz",
++      "integrity": "sha512-MSmPM9REYqDGBI8439mA4mWhV5sKmDlBKWIYbA3lRb2PTHACE0mgKwA8yQ2xq9vxDTuk4iPrECBAEW2aoFXY0Q==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@vitest/expect": "2.1.9",
++        "@vitest/mocker": "2.1.9",
++        "@vitest/pretty-format": "^2.1.9",
++        "@vitest/runner": "2.1.9",
++        "@vitest/snapshot": "2.1.9",
++        "@vitest/spy": "2.1.9",
++        "@vitest/utils": "2.1.9",
++        "chai": "^5.1.2",
++        "debug": "^4.3.7",
++        "expect-type": "^1.1.0",
++        "magic-string": "^0.30.12",
++        "pathe": "^1.1.2",
++        "std-env": "^3.8.0",
++        "tinybench": "^2.9.0",
++        "tinyexec": "^0.3.1",
++        "tinypool": "^1.0.1",
++        "tinyrainbow": "^1.2.0",
++        "vite": "^5.0.0",
++        "vite-node": "2.1.9",
++        "why-is-node-running": "^2.3.0"
++      },
++      "bin": {
++        "vitest": "vitest.mjs"
++      },
++      "engines": {
++        "node": "^18.0.0 || >=20.0.0"
++      },
++      "funding": {
++        "url": "https://opencollective.com/vitest"
++      },
++      "peerDependencies": {
++        "@edge-runtime/vm": "*",
++        "@types/node": "^18.0.0 || >=20.0.0",
++        "@vitest/browser": "2.1.9",
++        "@vitest/ui": "2.1.9",
++        "happy-dom": "*",
++        "jsdom": "*"
++      },
++      "peerDependenciesMeta": {
++        "@edge-runtime/vm": {
++          "optional": true
++        },
++        "@types/node": {
++          "optional": true
++        },
++        "@vitest/browser": {
++          "optional": true
++        },
++        "@vitest/ui": {
++          "optional": true
++        },
++        "happy-dom": {
++          "optional": true
++        },
++        "jsdom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/why-is-node-running": {
++      "version": "2.3.0",
++      "resolved": "https://registry.npmjs.org/why-is-node-running/-/why-is-node-running-2.3.0.tgz",
++      "integrity": "sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "siginfo": "^2.0.0",
++        "stackback": "0.0.2"
++      },
++      "bin": {
++        "why-is-node-running": "cli.js"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/yallist": {
+       "version": "3.1.1",
+       "resolved": "https://registry.npmmirror.com/yallist/-/yallist-3.1.1.tgz",
+diff --git a/package.json b/package.json
+index fce247d..3151049 100644
+--- a/package.json
++++ b/package.json
+@@ -8,6 +8,8 @@
+     "dev": "vite",
+     "dev:all": "node scripts/dev-with-ball.cjs",
+     "build": "tsc && vite build",
++    "test": "vitest run",
++    "test:watch": "vitest",
+     "preview": "vite preview",
+     "tauri": "tauri"
+   },
+@@ -23,7 +25,8 @@
+     "@types/react-dom": "^18.3.0",
+     "@vitejs/plugin-react": "^4.3.0",
+     "typescript": "^5.5.0",
+-    "vite": "^5.4.0"
++    "vite": "^5.4.0",
++    "vitest": "^2.1.9"
+   },
+   "allowScripts": {
+     "esbuild@0.21.5": true
+diff --git a/src/lib/evolution.ts b/src/lib/evolution.ts
+index 5efb786..d6a83ff 100644
+--- a/src/lib/evolution.ts
++++ b/src/lib/evolution.ts
+@@ -439,9 +439,22 @@ export interface EvolutionPackage {
+ 
+ /** 计算 JSON 规范化后的字节数（UTF-8） */
+ export function jsonBytes(v: unknown): number {
+-  const s = JSON.stringify(v);
++  let s: string;
++  try {
++    s = JSON.stringify(v);
++  } catch {
++    // 循环引用等不可序列化值：不抛异常，返回 0，由调用方自行决定如何处理。
++    // （EV7 单测发现的缺陷：原实现直接 JSON.stringify，遇到循环结构会抛 TypeError）
++    return 0;
++  }
++  if (typeof s !== "string") return 0;
++  // UTF-8 字节数：非 BMP 字符（codePoint > 0xffff，如 emoji）占 4 字节，
++  // 其余按 1/2/3 字节。原实现把一切非 ASCII 都按 3 字节算，会低估 4 字节字符。
+   let n = 0;
+-  for (const ch of s) n += ch.codePointAt(0)! > 0x7f ? 3 : 1;
++  for (const ch of s) {
++    const cp = ch.codePointAt(0) ?? 0;
++    n += cp <= 0x7f ? 1 : cp <= 0x7ff ? 2 : cp <= 0xffff ? 3 : 4;
++  }
+   return n;
+ }
+ 
+diff --git a/tests/evolution.test.ts b/tests/evolution.test.ts
+new file mode 100644
+index 0000000..a8f899e
+--- /dev/null
++++ b/tests/evolution.test.ts
+@@ -0,0 +1,344 @@
++// evolution.ts 纯函数层单测（EV7）
++//
++// 覆盖审计点名的五组：差分隐私 / K 匿名 / 白名单 / 指纹 / 采纳判定。
++//
++// 为什么先测这五组：审计指出 `lib/evolution.ts` 是「47KB 纯函数层却零单测」，
++// 而它**恰好是最容易测、最能证明严谨性的部分**——不依赖 DOM、不依赖 Rust、不依赖模型。
++//
++// 运行：npm test
++
++import { describe, expect, it } from "vitest";
++
++import {
++  ADOPT_REGRESSION_TOLERANCE,
++  FRE_DEFAULT_SEED,
++  FRE_SCHEMA,
++  K_ANON_DEMO,
++  K_ANON_PROD,
++  applyDpNoise,
++  evaluateAdoption,
++  fingerprint,
++  gaussian,
++  jsonBytes,
++  kAnonymityFilter,
++  laplace,
++  mulberry32,
++  weightOf,
++  whitelistViolations,
++  type AbSnapshot,
++  type EvolutionPackage,
++} from "../src/lib/evolution";
++
++/* ============================ 夹具（严格照真实接口） ============================ */
++
++/** 构造一个合法的 EvolutionPackage；sample_n 可控（K 匿名按包粒度判定） */
++function mkPkg(client: string, sampleN: number, auditPass = 0.9): EvolutionPackage {
++  return {
++    schema: FRE_SCHEMA,
++    client,
++    bucket: { task_kind: "review", country: "JP", lang: "ja" },
++    sample_n: sampleN,
++    plan_edit: {
++      default_steps_removed: {},
++      added_tool_sequence: [],
++      avg_edit_steps: 0.2,
++    },
++    lexicon: { zero_hit_keywords: {}, good_keywords: {} },
++    quality: { audit_pass_ratio: auditPass, unmatched_tokens: {} },
++    memory_prototype: [],
++    dp: { mechanism: "none", epsilon: 0, applied: false },
++    real_samples: sampleN,
++    size_bytes: 128,
++  };
++}
++
++function snap(o: Partial<AbSnapshot> = {}): AbSnapshot {
++  return {
++    label: "run",
++    editRate: 0.2,
++    auditPass: 0.9,
++    lexiconUnknown: 0.1,
++    toolRounds: 3,
++    ...o,
++  };
++}
++
++/* ============================ 1. 伪随机与噪声 ============================ */
++
++describe("随机源：必须可复现（同 seed 同序列）", () => {
++  it("mulberry32 同 seed 产出同序列", () => {
++    const a = mulberry32(FRE_DEFAULT_SEED);
++    const b = mulberry32(FRE_DEFAULT_SEED);
++    expect(Array.from({ length: 8 }, () => a())).toEqual(
++      Array.from({ length: 8 }, () => b()),
++    );
++  });
++
++  it("mulberry32 不同 seed 产出不同序列", () => {
++    expect(mulberry32(1)()).not.toBe(mulberry32(2)());
++  });
++
++  it("mulberry32 值域落在 [0,1)", () => {
++    const rng = mulberry32(FRE_DEFAULT_SEED);
++    for (let i = 0; i < 500; i++) {
++      const v = rng();
++      expect(v).toBeGreaterThanOrEqual(0);
++      expect(v).toBeLessThan(1);
++    }
++  });
++
++  it("gaussian 同 seed 可复现", () => {
++    expect(gaussian(mulberry32(7))).toBe(gaussian(mulberry32(7)));
++  });
++
++  it("laplace 同 seed 可复现；scale 越大波动越大", () => {
++    expect(laplace(mulberry32(3), 1)).toBe(laplace(mulberry32(3), 1));
++    const small = Math.abs(laplace(mulberry32(9), 0.5));
++    const big = Math.abs(laplace(mulberry32(9), 5));
++    expect(big).toBeGreaterThan(small);
++  });
++});
++
++/* ============================ 2. 差分隐私 ============================ */
++
++describe("差分隐私 applyDpNoise", () => {
++  // ⚠️ 真实签名：applyDpNoise(counts: Record<string, number>, epsilon, rng)
++  //    输入是**计数字典**（不是向量），输出为「加噪后取整、夹到 >= 0」的计数字典。
++  const counts = { a: 10, b: 10, c: 10, d: 10 };
++
++  it("输出保留全部键，且计数被夹到非负整数", () => {
++    const out = applyDpNoise(counts, 1, mulberry32(FRE_DEFAULT_SEED));
++    expect(Object.keys(out).sort()).toEqual(["a", "b", "c", "d"]);
++    for (const v of Object.values(out)) {
++      expect(Number.isInteger(v)).toBe(true);
++      expect(v).toBeGreaterThanOrEqual(0);
++    }
++  });
++
++  it("同 rng 序列 + 同 epsilon 可复现", () => {
++    const a = applyDpNoise(counts, 1, mulberry32(123));
++    const b = applyDpNoise(counts, 1, mulberry32(123));
++    expect(a).toEqual(b);
++  });
++
++  it("加噪会改变计数（噪声确实生效）", () => {
++    const out = applyDpNoise(counts, 0.1, mulberry32(FRE_DEFAULT_SEED));
++    expect(out).not.toEqual(counts);
++  });
++
++  it("epsilon 越小，噪声越大（隐私预算与可用性的取舍方向）", () => {
++    const dev = (eps: number) => {
++      const out = applyDpNoise(counts, eps, mulberry32(FRE_DEFAULT_SEED));
++      return Object.keys(counts).reduce((s, k) => s + Math.abs(out[k] - counts[k]), 0);
++    };
++    expect(dev(0.1)).toBeGreaterThan(dev(10));
++  });
++
++  it("epsilon 为 0 或负数时按下限 0.05 处理（仍加噪，不静默关闭 DP）", () => {
++    // 实现里 laplace scale = 1 / max(epsilon, 0.05)，故 ε<=0 等价于 ε=0.05
++    const zero = applyDpNoise(counts, 0, mulberry32(FRE_DEFAULT_SEED));
++    const floor = applyDpNoise(counts, 0.05, mulberry32(FRE_DEFAULT_SEED));
++    expect(zero).toEqual(floor);
++  });
++
++  it("计数为 0 时加噪后被夹回 0（不产生负数）", () => {
++    const out = applyDpNoise({ z: 0 }, 0.05, mulberry32(FRE_DEFAULT_SEED));
++    expect(out.z).toBeGreaterThanOrEqual(0);
++    expect(Number.isInteger(out.z)).toBe(true);
++  });
++
++  it("不修改入参（无副作用）", () => {
++    const input = { a: 5 };
++    const before = { ...input };
++    applyDpNoise(input, 1, mulberry32(5));
++    expect(input).toEqual(before);
++  });
++});
++
++/* ============================ 3. K 匿名 ============================ */
++
++describe("K 匿名 kAnonymityFilter", () => {
++  it("样本量不足 K 的包被丢弃（宁可不聚合）", () => {
++    const r = kAnonymityFilter([mkPkg("a", 1)], K_ANON_DEMO);
++    expect(r.kept).toHaveLength(0);
++    expect(r.dropped).toHaveLength(1);
++    expect(r.dropped[0].reason).toContain("K=");
++  });
++
++  it("样本量达标即保留（按包粒度判定）", () => {
++    const pkgs = Array.from({ length: 3 }, (_, i) => mkPkg(`c${i}`, K_ANON_DEMO));
++    const r = kAnonymityFilter(pkgs, K_ANON_DEMO);
++    expect(r.kept).toHaveLength(3);
++    expect(r.dropped).toHaveLength(0);
++  });
++
++  it("生产口径 K=20 比演示口径 K=2 更严格", () => {
++    expect(K_ANON_PROD).toBeGreaterThan(K_ANON_DEMO);
++    const pkgs = [mkPkg("d", 5)];
++    expect(kAnonymityFilter(pkgs, K_ANON_PROD).kept).toHaveLength(0);
++    expect(kAnonymityFilter(pkgs, K_ANON_DEMO).kept).toHaveLength(1);
++  });
++
++  it("边界：sample_n 恰等于 K 时保留（>= 语义）", () => {
++    expect(kAnonymityFilter([mkPkg("e", K_ANON_DEMO)], K_ANON_DEMO).kept).toHaveLength(1);
++  });
++
++  it("回显 K，便于日志记录", () => {
++    expect(kAnonymityFilter([], 7).k).toBe(7);
++  });
++});
++
++/* ============================ 4. 白名单 ============================ */
++
++describe("白名单 whitelistViolations（防原文外泄）", () => {
++  it("干净对象无违规", () => {
++    expect(whitelistViolations({ a: 1, b: "x", c: [1, 2] })).toEqual([]);
++  });
++
++  it("命中禁用字段名时报告违规（带路径）", () => {
++    const bad = whitelistViolations({ nested: { content: "合同原文" } });
++    expect(bad.length).toBeGreaterThan(0);
++    expect(bad.join(" ")).toContain("content");
++  });
++
++  it("路径以 $ 开头，便于定位", () => {
++    const bad = whitelistViolations({ content: "x" });
++    expect(bad[0].startsWith("$")).toBe(true);
++  });
++
++  it("数组元素也会被检查", () => {
++    expect(whitelistViolations({ list: [{ content: "x" }] }).length).toBeGreaterThan(0);
++  });
++});
++
++/* ============================ 5. 指纹 ============================ */
++
++describe("指纹 fingerprint", () => {
++  it("同输入同指纹（确定性）", () => {
++    expect(fingerprint("abc")).toBe(fingerprint("abc"));
++  });
++
++  it("不同输入不同指纹", () => {
++    expect(fingerprint("abc")).not.toBe(fingerprint("abd"));
++  });
++
++  it("空串也有稳定指纹", () => {
++    expect(fingerprint("")).toBe(fingerprint(""));
++  });
++
++  it("对中文稳定（UTF-8 路径一致）", () => {
++    expect(fingerprint("法元")).toBe(fingerprint("法元"));
++    expect(fingerprint("法元")).not.toBe(fingerprint("法原"));
++  });
++});
++
++/* ============================ 6. 采纳判定 ============================ */
++
++describe("采纳判定 evaluateAdoption（回归保护）", () => {
++  // ⚠️ 真实采纳条件（evolution.ts:685）：
++  //      adopt = (无任何指标显著回归) AND (同向改善的指标数 >= 2)
++  //    即「至少两项变好、且没有一项显著变差」。同理只改一项**不足以采纳**。
++
++  it("四项全部同向改善 → 采纳", () => {
++    const d = evaluateAdoption(
++      snap({ editRate: 0.3, auditPass: 0.7, lexiconUnknown: 0.3, toolRounds: 5 }),
++      snap({ editRate: 0.1, auditPass: 0.95, lexiconUnknown: 0.05, toolRounds: 2 }),
++    );
++    expect(d.regressed).toHaveLength(0);
++    expect(d.improved.length).toBeGreaterThanOrEqual(2);
++    expect(d.adopt).toBe(true);
++  });
++
++  it("仅 1 项改善 → **不采纳**（要求至少 2 项同向）", () => {
++    const d = evaluateAdoption(snap({ auditPass: 0.8 }), snap({ auditPass: 0.95 }));
++    expect(d.improved).toHaveLength(1);
++    expect(d.adopt).toBe(false);
++    expect(d.reasons.join(" ")).toContain("不足 2 项");
++  });
++
++  it("明显变差 → 必须拒绝（adopt=false）且列出 regressed", () => {
++    const d = evaluateAdoption(snap({ auditPass: 0.9 }), snap({ auditPass: 0.5 }));
++    expect(d.adopt).toBe(false);
++    expect(d.regressed.length).toBeGreaterThan(0);
++  });
++
++  it("容忍度内的极小波动不构成回归", () => {
++    const before = snap({ auditPass: 0.9, editRate: 0.2, lexiconUnknown: 0.1, toolRounds: 3 });
++    const after = snap({
++      auditPass: 0.9 * (1 - ADOPT_REGRESSION_TOLERANCE * 0.5),
++      editRate: 0.2,
++      lexiconUnknown: 0.1,
++      toolRounds: 3,
++    });
++    expect(evaluateAdoption(before, after).regressed).toHaveLength(0);
++  });
++
++  it("超出容忍度的下降即拒绝（阈值方向正确）", () => {
++    const before = snap({ auditPass: 0.9 });
++    const after = snap({ auditPass: 0.9 * (1 - ADOPT_REGRESSION_TOLERANCE * 3) });
++    expect(evaluateAdoption(before, after).adopt).toBe(false);
++  });
++
++  it("判定是纯函数：同输入同结论", () => {
++    expect(evaluateAdoption(snap(), snap())).toEqual(evaluateAdoption(snap(), snap()));
++  });
++
++  it("★ 任一指标显著回归即整体拒绝（不因其它指标大幅变好而放行）", () => {
++    const before = snap({ editRate: 0.3, auditPass: 0.9, lexiconUnknown: 0.3, toolRounds: 5 });
++    // 编辑率、检索词未登录率、工具轮数都大幅改善，但**自检通过率崩了**
++    const after = snap({ editRate: 0.05, auditPass: 0.4, lexiconUnknown: 0.02, toolRounds: 1 });
++    const d = evaluateAdoption(before, after);
++    expect(d.improved.length).toBeGreaterThanOrEqual(2); // 确实变好了三项
++    expect(d.regressed.length).toBeGreaterThan(0);       // 但有一项崩了
++    expect(d.adopt).toBe(false);                          // 仍必须拒绝
++  });
++
++  it("四项全不变 → 不采纳（没有改善证据）", () => {
++    expect(evaluateAdoption(snap(), snap()).adopt).toBe(false);
++  });
++});
++
++/* ============================ 7. 加权聚合权重 ============================ */
++
++describe("聚合权重 weightOf", () => {
++  it("样本量越大权重越大（线性）", () => {
++    expect(weightOf(10, 0.9, 0)).toBeGreaterThan(weightOf(5, 0.9, 0));
++  });
++
++  it("审计通过率越高权重越大", () => {
++    expect(weightOf(5, 1.0, 0)).toBeGreaterThan(weightOf(5, 0.5, 0));
++  });
++
++  it("越陈旧权重越小（新鲜度衰减）", () => {
++    expect(weightOf(5, 0.9, 30)).toBeLessThan(weightOf(5, 0.9, 0));
++  });
++
++  it("审计通过率为 0 也保留 0.2 地板（低质桶可自救）", () => {
++    expect(weightOf(5, 0, 0)).toBeGreaterThan(0);
++    // 地板恰好是 0.2 倍样本量
++    expect(weightOf(5, 0, 0)).toBeCloseTo(5 * 0.2, 6);
++  });
++
++  it("负样本量被夹到 0（不产生负权重）", () => {
++    expect(weightOf(-3, 0.9, 0)).toBe(0);
++  });
++
++  it("负 ageDays 被夹到 0（不产生放大效应）", () => {
++    expect(weightOf(5, 0.9, -10)).toBeCloseTo(weightOf(5, 0.9, 0), 9);
++  });
++});
++
++/* ============================ 8. 其它纯函数 ============================ */
++
++describe("辅助纯函数", () => {
++  it("jsonBytes 按 UTF-8 字节计（中文 3 字节）", () => {
++    expect(jsonBytes("a")).toBe(new TextEncoder().encode('"a"').length);
++    expect(jsonBytes("法元")).toBe(new TextEncoder().encode('"法元"').length);
++  });
++
++  it("jsonBytes 对不可序列化值不抛异常", () => {
++    const circular: Record<string, unknown> = {};
++    circular.self = circular;
++    expect(() => jsonBytes(circular)).not.toThrow();
++  });
++});
+-- 
+2.54.0.windows.1
+
