@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-15T23:03:53+08:00",
+  "_生成时间": "2026-10-15T23:05:20+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -17,8 +17,8 @@
     "Thumbs.db": "Windows 缩略图缓存"
   },
   "_统计": {
-    "files": 91,
-    "bytes": 46997188
+    "files": 93,
+    "bytes": 47007526
   },
   "files": [
     {
@@ -127,6 +127,11 @@
       "sha256": "B6B392CF67069156D3A01DB787DD65B0C6BD2CD8646CAF723869DAC50BBC6F07"
     },
     {
+      "path": "skill/citation-audit/scripts/verify_skill_spec.py",
+      "bytes": 5761,
+      "sha256": "410CEADF92B04291F253743136B7004E39E324BEE410E0896EFB6D995DB30AA5"
+    },
+    {
       "path": "src/faron_agentgroup/__init__.py",
       "bytes": 3469,
       "sha256": "19D48D3D23A01824A04BFD53DEE51E6DAC92503B39B9A63D078865E4B692A61D"
@@ -182,9 +187,14 @@
       "sha256": "3792A54AB3EB48066E9295293EAA81B956AB85FC1288509F865760EDFB110832"
     },
     {
+      "path": "tools/run_all_checks.py",
+      "bytes": 3644,
+      "sha256": "0E9749FF8679849964B3EB2E08B3AE5CEC6BAC110A8CE237CE7DD3C8883ADF37"
+    },
+    {
       "path": "任务台账.md",
-      "bytes": 16761,
-      "sha256": "4C3810608EF49C7F1D86DC84CA5479EC6C1F18347AE98028A65D9C3ECD4F3392"
+      "bytes": 17694,
+      "sha256": "BA74AE236774C7B4044F5A73AF10BA065744698B60ED9463685AAA214C3EE490"
     },
     {
       "path": "接手必读.md",

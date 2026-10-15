@@ -1,0 +1,380 @@
+{
+  "started_at": "2026-10-15T23:06:40",
+  "task_kind": "review",
+  "kind_label": "合同审查",
+  "commission": "我方（中国某制造企业）与日本某商社设立合资公司，合资合同履行中出现出资迟延与经营分歧。请就下列问题出具《合同审查意见书》：①日方出资迟延是否构成违约、我方能否请求继续履行；②准据法与管辖约定是否有效；③风险条款与修改建议。",
+  "steps": [
+    {
+      "step": "STEP 1 · 部署 Agent Group（openJiuwen agent_teams）",
+      "at": "23:06:40",
+      "payload": {
+        "team_name": "faron_wenshu_team",
+        "framework": "openjiuwen.agent_teams",
+        "leader": "team_leader",
+        "members": [
+          {
+            "name": "law_retriever",
+            "display": "检索员·民商",
+            "role": "teammate",
+            "desc": "在内置日美法库中检索真实法条并回传溯源信息。"
+          },
+          {
+            "name": "kg_curator",
+            "display": "图谱策展",
+            "role": "teammate",
+            "desc": "把任务材料归到案由，并从知识图谱取出要件与请求权基础骨架。"
+          },
+          {
+            "name": "drafter",
+            "display": "起草员",
+            "role": "teammate",
+            "desc": "依据检索结果与模板起草文书正文。"
+          },
+          {
+            "name": "citation_auditor",
+            "display": "质检员·两段自检",
+            "role": "teammate",
+            "desc": "两段自检：引用是否真实存在 + 是否落在案由请求权基础范围内。"
+          },
+          {
+            "name": "human_reviewer",
+            "display": "人类复核员",
+            "role": "human_agent",
+            "desc": "真实人类复核员：审批计划卡（need_confirm）、复核两段自检结论。"
+          }
+        ],
+        "tools": [
+          "laws_search",
+          "law_by_id",
+          "laws_country_preview",
+          "template_load",
+          "translate_text",
+          "audit_citations",
+          "audit_applicability",
+          "returned_refs_summary",
+          "kg_find_case",
+          "kg_query",
+          "kg_add_candidate",
+          "kg_confirm_edge"
+        ],
+        "tool_count": 12,
+        "tool_registration": {
+          "ok": 12,
+          "skipped": 0,
+          "failed": 0,
+          "errors": []
+        },
+        "enable_hitt": true,
+        "dispatch_mode": "autonomous",
+        "teammate_mode": "build_mode",
+        "spawn_mode": "inprocess",
+        "model_pool_strategy": "by_model_name",
+        "model_pool": [
+          "gpt-4o",
+          "gpt-4o"
+        ],
+        "has_real_model": false,
+        "storage": "sqlite"
+      }
+    },
+    {
+      "step": "STEP 2 · 图谱策展（kg_find_case → kg_query）",
+      "at": "23:06:41",
+      "payload": {
+        "命中案由": "涉外合资经营合同纠纷",
+        "骨架渲染": "案由：涉外合资经营合同纠纷\n构成要件（须逐一覆盖）：\n- 出资义务与验资｜请求权基础：会社法｜证据：合资合同/合营协议、出资凭证与验资报告\n- 公司治理与决策程序｜请求权基础：会社法｜证据：公司章程、董事会/股东会决议\n- 利润分配与财务｜请求权基础：会社法、美国法典 Title 15 — 商业与贸易｜证据：审计报告与财务报表\n- 股权转让与退出｜请求权基础：会社法\n- 违约责任与损害赔偿｜请求权基础：民法｜证据：催告函与回函\n争议焦点：出资违约、控制权与表决权争议、利润分配争议、股权转让效力\n相关文书：合同审查意见书、民事起诉状、证据目录、质证意见、代理词",
+        "请求权基础（法律名）": [
+          "民法",
+          "Civil Code",
+          "美国法典 Title 15 — 商业与贸易",
+          "United States Code, Title 15",
+          "会社法",
+          "Companies Act"
+        ],
+        "证据种类数": 6,
+        "注意": "图谱法条节点只有法律名、没有条号——条号必须由检索员真实检索"
+      }
+    },
+    {
+      "step": "STEP 3 · 检索员真实检索（laws_search）",
+      "at": "23:06:41",
+      "payload": {
+        "检索明细": [
+          {
+            "关键词": "会社法",
+            "国家": "JP",
+            "用途": "日本公司法（图谱请求权基础）",
+            "命中": [
+              "会社法 第四百六十五条"
+            ]
+          },
+          {
+            "关键词": "契約",
+            "国家": "JP",
+            "用途": "日本民法（合同履行）",
+            "命中": [
+              "民法 第五百二十二条",
+              "民法 第五百四十一条"
+            ]
+          },
+          {
+            "关键词": "trademark",
+            "国家": "US",
+            "用途": "美国法典 Title 15（图谱证据基础）",
+            "命中": [
+              "United States Code, Title 15 §1125",
+              "United States Code, Title 15 §1051"
+            ]
+          }
+        ],
+        "工具真实返回集合": [
+          "会社法 第四百六十五条",
+          "民法 第五百二十二条",
+          "民法 第五百四十一条",
+          "United States Code, Title 15 §1125",
+          "United States Code, Title 15 §1051"
+        ],
+        "数量": 5
+      }
+    },
+    {
+      "step": "STEP 3b · 图谱自进化：登记候选边（待人工确认）",
+      "at": "23:06:41",
+      "payload": {
+        "候选边": [
+          {
+            "law": "United States Code, Title 15",
+            "edge_id": 53,
+            "confirmed": false
+          }
+        ],
+        "机制": "置信度 0.6 < 阈值 0.8 → 候选边；人工确认后才作为后续规划依据"
+      }
+    },
+    {
+      "step": "STEP 4 · 起草员起草（★ 故意埋入一处库外条号「第9999条」）",
+      "at": "23:06:41",
+      "payload": "一、合同基本情况\n本案为中外合资经营合同纠纷，标的为中日合资公司的出资义务履行与经营决策争议。\n任务类型：合同审查（生成《合同审查意见书》（.docx））。\n适用文书骨架：一、合同基本情况；二、逐条风险与修改建议（风险等级 / 原文条款 / 问题 / 修改建议）；三、重点条款专项意见（违约责任、知识产权、争议解决、保密）；四、引用自检；五、总体结论与谈判策略。\n\n二、逐条风险与修改建议\n风险一（高）｜原文条款：出资时间表与违约责任约定不明。\n  问题：未约定迟延出资的违约金计算方式与催告程序。\n  修改建议：补充书面催告 + 逾期违约金条款，并明确继续履行请求权。\n风险二（中）｜原文条款：董事会表决机制。\n  问题：未约定僵局打破机制。\n  修改建议：引入递进表决或第三方调解条款。\n\n三、重点条款专项意见\n1. 违约责任：依 会社法 主张继续履行与损害赔偿；\n2. 公司治理：依 第五百二十二条 的诚信履行原则，\n   董事会决议应符合章程与股东会授权范围；\n3. 争议解决：建议明确准据法与仲裁地。\n\n**第9999条**（起草员另行援引，未在本次检索范围内 —— 这是一处故意埋入的库外条号）\n\n四、引用自检\n（待质检员填写）\n\n五、总体结论与谈判策略\n建议以继续履行为主、损害赔偿为辅的谈判基调，并在补充协议中固定出资时间表。\n"
+    },
+    {
+      "step": "STEP 5 · 质检员两段确定性自检（audit_citations + audit_applicability）",
+      "at": "23:06:41",
+      "payload": {
+        "第一段_引用真实性": {
+          "stage": "第一段 · 引用是否真实存在",
+          "ok": false,
+          "total": 2,
+          "covered": 1,
+          "unmatched": [
+            "第9999条"
+          ],
+          "report": "- 识别到条文号引用 2 处（去重）\n- 与「本次工具真实返回」法条对应：1/2\n- 以下引用未在工具返回中找到对应条文（可能来自用户材料原文或模型笔误，请人工核实后再采用）：\n  「第9999条」\n- 自检为确定性规则校验：按中文/日文「第X条(之Y/のY)」、美国法典「§NN」等条文号格式识别正文引用，并判定每条引用是否能在「本次工具真实返回」的法条中找到对应条文号；未覆盖项仅提示人工核实，不视为有效引用。"
+        },
+        "第二段_法条适用性": {
+          "stage": "第二段 · 是否落在案由图谱请求权基础范围内",
+          "checked": 3,
+          "in_scope": [
+            "会社法",
+            "民法",
+            "United States Code, Title 15"
+          ],
+          "out_of_scope": [],
+          "law_names": [
+            "民法",
+            "Civil Code",
+            "美国法典 Title 15 — 商业与贸易",
+            "United States Code, Title 15",
+            "会社法",
+            "Companies Act"
+          ],
+          "law_names_display": [
+            "民法",
+            "Civil Code",
+            "美国法典 Title 15 — 商业与贸易",
+            "United States Code, Title 15",
+            "会社法",
+            "Companies Act"
+          ],
+          "report": "- 本案由图谱请求权基础：民法、Civil Code、美国法典 Title 15 — 商业与贸易、United States Code, Title 15、会社法、Companies Act\n- 本次引用法条 3 部，落在案由范围内的 3 部\n- 全部引用均落在本案由图谱的请求权基础范围内"
+        }
+      }
+    },
+    {
+      "step": "STEP 6 · 交付",
+      "at": "23:06:41",
+      "payload": {
+        "交付物": "runtime\\deliverable_20261015-230640.docx",
+        "导出说明": "已导出 .docx（38520 字节）",
+        "第一段通过": false,
+        "第二段超范围": [],
+        "未覆盖项": [
+          "第9999条"
+        ],
+        "候选边（待人工确认）": [
+          "United States Code, Title 15"
+        ]
+      }
+    }
+  ],
+  "finished_at": "2026-10-15T23:06:41",
+  "case": "涉外合资经营合同纠纷",
+  "skeleton": {
+    "case": "涉外合资经营合同纠纷",
+    "elements": [
+      {
+        "name": "出资义务与验资",
+        "laws": [
+          "会社法"
+        ],
+        "evidences": [
+          "合资合同/合营协议",
+          "出资凭证与验资报告"
+        ]
+      },
+      {
+        "name": "公司治理与决策程序",
+        "laws": [
+          "会社法"
+        ],
+        "evidences": [
+          "公司章程",
+          "董事会/股东会决议"
+        ]
+      },
+      {
+        "name": "利润分配与财务",
+        "laws": [
+          "会社法",
+          "美国法典 Title 15 — 商业与贸易"
+        ],
+        "evidences": [
+          "审计报告与财务报表"
+        ]
+      },
+      {
+        "name": "股权转让与退出",
+        "laws": [
+          "会社法"
+        ],
+        "evidences": []
+      },
+      {
+        "name": "违约责任与损害赔偿",
+        "laws": [
+          "民法"
+        ],
+        "evidences": [
+          "催告函与回函"
+        ]
+      }
+    ],
+    "issues": [
+      "出资违约",
+      "控制权与表决权争议",
+      "利润分配争议",
+      "股权转让效力"
+    ],
+    "docs": [
+      "合同审查意见书",
+      "民事起诉状",
+      "证据目录",
+      "质证意见",
+      "代理词"
+    ],
+    "lawNames": [
+      "民法",
+      "Civil Code",
+      "美国法典 Title 15 — 商业与贸易",
+      "United States Code, Title 15",
+      "会社法",
+      "Companies Act"
+    ],
+    "lawNamesDisplay": [
+      "民法",
+      "美国法典 Title 15 — 商业与贸易",
+      "会社法"
+    ]
+  },
+  "returned_refs": [
+    {
+      "id": 991382539619972312,
+      "title": "会社法",
+      "article_no": "第四百六十五条",
+      "source": "e-Gov 法令検索",
+      "excerpt": "剰余金の配当等は、株主総会の決議によって定める。（盈余分配须经股东会决议。）"
+    },
+    {
+      "id": 630412937134666010,
+      "title": "民法",
+      "article_no": "第五百二十二条",
+      "source": "e-Gov 法令検索",
+      "excerpt": "契約の当事者は、信義に従い誠実に契約を履行しなければならない。（当事人应依信义诚实履行合同。）"
+    },
+    {
+      "id": 531709510671748812,
+      "title": "民法",
+      "article_no": "第五百四十一条",
+      "source": "e-Gov 法令検索",
+      "excerpt": "債務の履行が契約その他の債務の発生原因及び取引上の社会通念に照らして不能となったときは、債権者は、その債務の履行を請求することができない。（履行不能时债权人不得请求履行。）"
+    },
+    {
+      "id": 3928352142324139962,
+      "title": "United States Code, Title 15",
+      "article_no": "§1125",
+      "source": "govinfo.gov",
+      "excerpt": "False designations of origin, false descriptions, and dilution forbidden. （禁止虚假原产地标示与虚假描述。）"
+    },
+    {
+      "id": 8437097095190135154,
+      "title": "United States Code, Title 15",
+      "article_no": "§1051",
+      "source": "govinfo.gov",
+      "excerpt": "Registration of trademarks; application, filing date, and examination. （商标注册的申请与审查。）"
+    }
+  ],
+  "audit_stage1": {
+    "stage": "第一段 · 引用是否真实存在",
+    "ok": false,
+    "total": 2,
+    "covered": 1,
+    "unmatched": [
+      "第9999条"
+    ],
+    "report": "- 识别到条文号引用 2 处（去重）\n- 与「本次工具真实返回」法条对应：1/2\n- 以下引用未在工具返回中找到对应条文（可能来自用户材料原文或模型笔误，请人工核实后再采用）：\n  「第9999条」\n- 自检为确定性规则校验：按中文/日文「第X条(之Y/のY)」、美国法典「§NN」等条文号格式识别正文引用，并判定每条引用是否能在「本次工具真实返回」的法条中找到对应条文号；未覆盖项仅提示人工核实，不视为有效引用。"
+  },
+  "audit_stage2": {
+    "stage": "第二段 · 是否落在案由图谱请求权基础范围内",
+    "checked": 3,
+    "in_scope": [
+      "会社法",
+      "民法",
+      "United States Code, Title 15"
+    ],
+    "out_of_scope": [],
+    "law_names": [
+      "民法",
+      "Civil Code",
+      "美国法典 Title 15 — 商业与贸易",
+      "United States Code, Title 15",
+      "会社法",
+      "Companies Act"
+    ],
+    "law_names_display": [
+      "民法",
+      "Civil Code",
+      "美国法典 Title 15 — 商业与贸易",
+      "United States Code, Title 15",
+      "会社法",
+      "Companies Act"
+    ],
+    "report": "- 本案由图谱请求权基础：民法、Civil Code、美国法典 Title 15 — 商业与贸易、United States Code, Title 15、会社法、Companies Act\n- 本次引用法条 3 部，落在案由范围内的 3 部\n- 全部引用均落在本案由图谱的请求权基础范围内"
+  },
+  "candidate_edges": [
+    {
+      "law": "United States Code, Title 15",
+      "edge_id": 53,
+      "confirmed": false
+    }
+  ],
+  "deliverable": "runtime\\deliverable_20261015-230640.docx"
+}
