@@ -31,6 +31,30 @@ from datetime import datetime, timezone
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(REPO, "资料", "提交物清单.json")
 
+# ---------------------------------------------------------------------------
+# 控制台编码兜底
+# ---------------------------------------------------------------------------
+# 为什么要这个：中文 Windows 的控制台默认 GBK，打印 ✅ / ❌ 这类字符会抛
+#   UnicodeEncodeError: 'gbk' codec can't encode character '\u2705'
+# 直接用 `python tools/gen_manifest.py` 就能踩到（本轮实测）。
+# 处理方式：能改成 UTF-8 就改；改不了则把这些符号降级为 ASCII，
+# 保证脚本在任何控制台上都能跑完 —— 不允许因为「打印不出来」而中断校验。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+_UNICODE_OK = True
+try:
+    sys.stdout.write("")
+    "✅".encode(sys.stdout.encoding or "utf-8")
+except Exception:
+    _UNICODE_OK = False
+
+OK = "✅" if _UNICODE_OK else "[OK]"
+NG = "❌" if _UNICODE_OK else "[FAIL]"
+
 #: 纳入清单的顶层目录（相对仓库根）
 INCLUDE_DIRS = ["提交包", "资料", "源码", "docs", "skill", "tests", "src", "tools"]
 #: 纳入的顶层文件（相对仓库根）
@@ -166,7 +190,7 @@ def main(argv=None) -> int:
 
     if args.check:
         if not os.path.isfile(OUT):
-            print(f"❌ 清单不存在：{OUT}")
+            print(f"{NG} 清单不存在：{OUT}")
             print("   先生成一次：python tools/gen_manifest.py")
             return 1
         with io.open(OUT, encoding="utf-8") as f:
@@ -186,7 +210,7 @@ def main(argv=None) -> int:
             for p in items[:20]:
                 print(f"    [{label}] {p}")
         ok = not (added or removed or changed)
-        print("\n" + ("✅ 一致" if ok else "❌ 不一致（清单需重新生成或仓库有未登记改动）"))
+        print("\n" + (f"{OK} 一致" if ok else f"{NG} 不一致（清单需重新生成或仓库有未登记改动）"))
         return 0 if ok else 1
 
     payload = {
