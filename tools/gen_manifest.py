@@ -122,6 +122,26 @@ def matches_exclude_re(rel: str) -> bool:
     return any(rx.match(rel) for rx, _ in EXCLUDE_RE)
 
 
+def _git_dirty_files() -> list[str]:
+    """返回工作区/暂存区有改动的文件（相对路径）。非 git 仓库时返回 []。"""
+    import subprocess
+    try:
+        p = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=REPO, capture_output=True, timeout=60,
+        )
+        if p.returncode != 0:
+            return []
+        out = p.stdout.decode("utf-8", "replace")
+        files: list[str] = []
+        for line in out.splitlines():
+            if len(line) > 3:
+                files.append(line[3:].strip().replace("\\", "/"))
+        return files
+    except Exception:
+        return []
+
+
 def git_tracked_files() -> list[str] | None:
     """用 `git ls-files` 取「提交物」的权威名单。
 
@@ -269,6 +289,30 @@ def main(argv=None) -> int:
             print(f"{NG} 清单不存在：{OUT}")
             print("   先生成一次：python tools/gen_manifest.py")
             return 1
+
+        # ------------------------------------------------------------------
+        # 护栏：工作区有未提交改动时，先讲清「比对的是 git HEAD 的内容」
+        # ------------------------------------------------------------------
+        # 为什么需要：
+        #   `collect()` 取的是 **HEAD 的 blob**，所以清单与工作区是否脏无关。
+        #   但使用者在「刚改完文件」时跑这条命令，看到「不一致」很容易
+        #   误读成「材料被篡改」。本轮（第五轮）反复踩到：改了文档 → 忘了
+        #   重新生成清单 → 报变更；实际根因只是**忘跑生成**，不是仓库有问题。
+        #
+        #   所以这里显式区分两种「不一致」：
+        #     ① 工作区脏 → 大概率是「改完没重新生成」，属操作问题
+        #     ② 工作区干净但仍不一致 → 才可能是真的内容漂移
+        dirty = _git_dirty_files()
+        if dirty:
+            print(f"{NG} 注意：工作区有 {len(dirty)} 个未提交改动")
+            for p in dirty[:10]:
+                print(f"      · {p}")
+            if len(dirty) > 10:
+                print(f"      … 另有 {len(dirty) - 10} 个")
+            print("    → 清单比对的是 **git HEAD 的内容**；若你刚改过文件，")
+            print("      请先提交，再跑 `python tools/gen_manifest.py` 重新生成清单。")
+            print()
+
         with io.open(OUT, encoding="utf-8") as f:
             old = json.load(f)
         old_map = {e["path"]: (e["bytes"], e["sha256"]) for e in old.get("files", [])}
