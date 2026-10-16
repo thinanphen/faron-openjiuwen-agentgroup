@@ -139,7 +139,7 @@ if post_pruned:
 if failed == 0:
     print()
     print("另需单独跑（TypeScript 侧，在 Legal-Workspace 仓库）：")
-    print("   npm test            → 期望 74 passed")
+    print("   npm test            → 期望 75 passed (75)")
     print("   npm run build       → 期望 exit=0")
     print("   node scripts/check-ui-copy.mjs  → 期望 6/6")
 
