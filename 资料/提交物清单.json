@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-16T14:08:09+08:00",
+  "_生成时间": "2026-10-16T14:08:55+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -18,7 +18,7 @@
   },
   "_统计": {
     "files": 93,
-    "bytes": 47003818
+    "bytes": 47006212
   },
   "files": [
     {
@@ -29,8 +29,8 @@
     },
     {
       "path": ".gitattributes",
-      "bytes": 46,
-      "sha256": "A71C45BDC1261BF1EBD0EBD3E4BA9F44732201C1590F5A11A9C83C187FB1559B",
+      "bytes": 357,
+      "sha256": "FC5ACCC5BE4BBBCADAF69E30E8D6A5DABA4DA8941160FF3B91FD888EDB643027",
       "source": "git-blob"
     },
     {
@@ -215,8 +215,8 @@
     },
     {
       "path": "tools/gen_manifest.py",
-      "bytes": 9876,
-      "sha256": "3792A54AB3EB48066E9295293EAA81B956AB85FC1288509F865760EDFB110832",
+      "bytes": 11959,
+      "sha256": "A97B2AB90A6DEE16DA44C65D55DBC8FD39512DCEAA585AB716E91D7B8E714907",
       "source": "git-blob"
     },
     {
