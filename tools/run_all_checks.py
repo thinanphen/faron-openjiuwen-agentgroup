@@ -32,6 +32,21 @@ C = {
 }
 
 
+def _git_dirty() -> list[str]:
+    """返回工作区/暂存区有改动的文件；非 git 仓库或取不到时返回 []。"""
+    try:
+        p = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=REPO, capture_output=True, timeout=60,
+        )
+        if p.returncode != 0:
+            return []
+        out = p.stdout.decode("utf-8", "replace")
+        return [ln[3:].strip() for ln in out.splitlines() if len(ln) > 3]
+    except Exception:
+        return []
+
+
 def run(label: str, args: list[str], expect_ok: bool = True) -> tuple[bool, str]:
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
@@ -77,26 +92,57 @@ STEPS: list[tuple[str, list[str], bool]] = [
 
 
 def prune_runtime() -> list[str]:
-    """只保留 runtime/ 里最新一组产出，返回被删除的文件名。
+    """清理 runtime/ 里**未跟踪**的历史产出；**已跟踪的取证物一律不动**。
 
-    为什么要有这一步：`run_offline_demo.py` 每次运行都生成一对带时间戳的文件。
-    不清理会让 runtime/ 每次验证都膨胀，并让提交物清单在两次运行间「不一致」。
-    （约定见 runtime/README.md。）
+    ── 为什么这样设计（前几版都错了）────────────────────────────────
+    早期版本「按时间戳排序，保留最新一个，其余全删」，有两个致命问题：
+
+    ① **`files[:-1]` 在只有 1 个文件时是空操作** —— 若已提交的恰好是唯一一个，
+       它既不会被删也不会被恢复，逻辑形同虚设（本轮实测踩到）。
+    ② **更根本：不该删已提交的取证物。** `runtime/deliverable_*.docx` 是
+       「第9999条被点名」的**物证**（见 runtime/README.md），是**有意提交**的。
+       一个验证脚本**没有权力**把它删掉 —— 这会改变仓库内容，并让紧随其后的
+       「清单一致性」检查因工作区变脏而报错。
+
+    ── 现在的规则 ────────────────────────────────────────────────
+      · **已跟踪的文件：不碰**（它是取证物，属于提交内容）
+      · **未跟踪的文件：删除**（它们只是本地跑 demo 的副产品）
+
+    这样 `run_all_checks.py` 不再改变任何已提交内容，
+    「清单一致性」也就不会因为清理动作而失败。
     """
     import glob
-    removed: list[str] = []
+    import subprocess
+
     rt = os.path.join(REPO, "runtime")
     if not os.path.isdir(rt):
-        return removed
+        return []
+
+    # 一次取全部未跟踪文件，避免逐个 git 调用
+    try:
+        p = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+            cwd=REPO, capture_output=True, timeout=60,
+        )
+        untracked = set(
+            f for f in p.stdout.decode("utf-8", "replace").split("\0") if f
+        )
+    except Exception:
+        return []
+
+    handled: list[str] = []
     for pattern in ("deliverable_*.docx", "runlog_*.json"):
-        files = sorted(glob.glob(os.path.join(rt, pattern)))
-        for f in files[:-1]:  # 除最后一个（最新）外全删
-            try:
-                os.remove(f)
-                removed.append(os.path.basename(f))
-            except OSError:
-                pass
-    return removed
+        for f in sorted(glob.glob(os.path.join(rt, pattern))):
+            name = os.path.basename(f)
+            rel = f"runtime/{name}"
+            if rel in untracked:
+                try:
+                    os.remove(f)
+                    handled.append(f"{name}（未跟踪，已删除）")
+                except OSError:
+                    pass
+            # 已跟踪 → 什么都不做（取证物，属于提交内容）
+    return handled
 
 
 print("=" * 74)
@@ -109,7 +155,36 @@ print("=" * 74)
 #    本轮实测：不先清理时 8/9，先清理后 9/9。这是**顺序 + 状态**双重依赖。
 pre_pruned = prune_runtime()
 if pre_pruned:
-    print(f"{C['y']}预处理{C['x']} 清理 runtime/ 历史产出 {len(pre_pruned)} 个（只保留最新一组）")
+    print(f"{C['y']}预处理{C['x']} runtime/ 历史产出 {len(pre_pruned)} 个（只保留最新一组）")
+
+# ---------------------------------------------------------------------------
+# 闸门：工作区必须干净
+# ---------------------------------------------------------------------------
+# 为什么必需：本轮（第五、六轮）「清单不一致」反复出现，**报 9 次、根因各异**，
+# 其中相当一部分是我自己的流程问题 ——
+# 「改了文档 → 忘了重新生成清单 → 提交推送」，或「清理脚本删掉了已提交的文件」。
+# 这类问题本机怎么跑都可能看不出来，只有**别人 clone 时才暴露**。
+#
+# 所以：**工作区不干净就直接判失败**，并明确告诉使用者该做什么。
+# 一个「允许在脏工作区上判绿」的验证脚本，等于没有验证。
+dirty = _git_dirty()
+if dirty:
+    print()
+    print(f"{C['r']}❌{C['x']} 工作区不干净（{len(dirty)} 项），拒绝给出「全部通过」的结论")
+    for p in dirty[:12]:
+        print(f"   {C['d']}{p}{C['x']}")
+    if len(dirty) > 12:
+        print(f"   {C['d']}… 另有 {len(dirty) - 12} 项{C['x']}")
+    print()
+    print("   → 清单比对的是 **git HEAD 的内容**；通常意味着：")
+    print("     ① 改了文件但**没有重新生成清单** → 跑 `python tools/gen_manifest.py`")
+    print("     ② 改了文件但**没有提交** → 先提交")
+    print("   → 处理后再跑本脚本；**不要在脏工作区上宣告验证通过**。")
+    print()
+    # 仍然继续跑其余项，便于一次看到全部信息，但最终必然 exit=1
+    dirty_gate_failed = True
+else:
+    dirty_gate_failed = False
 
 passed = failed = 0
 for label, args, expect in STEPS:
@@ -125,7 +200,10 @@ for label, args, expect in STEPS:
 
 print()
 print("=" * 74)
-print(f"结果：{passed} 通过 / {failed} 未通过 / 共 {len(STEPS)}")
+if dirty_gate_failed:
+    print(f"结果：{passed} 通过 / {failed + 1} 未通过 / 共 {len(STEPS) + 1}（含「工作区干净」闸门）")
+else:
+    print(f"结果：{passed} 通过 / {failed} 未通过 / 共 {len(STEPS)}")
 print("=" * 74)
 
 # 跑完 demo 又会生成一组，再清理一次，保持「只剩最新一组」的不变式
@@ -143,4 +221,4 @@ if failed == 0:
     print("   npm run build       → 期望 exit=0")
     print("   node scripts/check-ui-copy.mjs  → 期望 6/6")
 
-sys.exit(1 if failed else 0)
+sys.exit(1 if (failed or dirty_gate_failed) else 0)
