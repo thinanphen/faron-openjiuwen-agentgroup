@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-16T14:16:20+08:00",
+  "_生成时间": "2026-10-16T14:21:57+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -13,6 +13,7 @@
     "_hold": "本机暂存目录；已被 .gitignore",
     "交付补丁": "由 git format-patch 从提交生成的交付方式，非交付内容",
     "提交物清单.json": "本清单自身；自引用无法得到稳定哈希",
+    "gen_manifest.py": "本清单的生成脚本自身；自引用，改脚本即让清单失效",
     ".DS_Store": "macOS 编辑器产物",
     "Thumbs.db": "Windows 缩略图缓存"
   },
@@ -21,8 +22,8 @@
     "^runtime/runlog_\\d{8}-\\d{6}\\.json$": "离线演示取证日志（可复现，每次运行换时间戳）"
   },
   "_统计": {
-    "files": 93,
-    "bytes": 47006409
+    "files": 92,
+    "bytes": 46994450
   },
   "files": [
     {
@@ -215,12 +216,6 @@
       "path": "tests/verify_zero_dep.py",
       "bytes": 4391,
       "sha256": "B11A8005BA0179A08E1CAC118D465EBFEECE5F2748D72280FD9FDEC3645BDFA2",
-      "source": "git-blob"
-    },
-    {
-      "path": "tools/gen_manifest.py",
-      "bytes": 11959,
-      "sha256": "A97B2AB90A6DEE16DA44C65D55DBC8FD39512DCEAA585AB716E91D7B8E714907",
       "source": "git-blob"
     },
     {
