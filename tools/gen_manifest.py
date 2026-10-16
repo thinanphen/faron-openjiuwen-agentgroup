@@ -25,6 +25,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -88,6 +89,20 @@ EXCLUDE = {
 #: 按扩展名排除的临时文件
 EXCLUDE_EXT = {".pyc", ".pyo", ".swp", ".tmp", ".log", ".orig", ".rej"}
 
+#: 按正则排除的**可复现产出**（文件名带时间戳，每次运行都换名字）
+#:
+#: 为什么必须排掉：`run_offline_demo.py` 每次运行生成
+#: `deliverable_<ts>.docx` / `runlog_<ts>.json`。清单若钉住某一对，
+#: 那么「跑一次验证」就会让清单与仓库对不上 ——
+#: 而这不代表任何材料被改动，只代表**重新生成了一份同样的产出**。
+#: 一句话：**带时间戳的可复现产出不属于「完整性凭证」的范围。**
+EXCLUDE_RE = [
+    (re.compile(r"^runtime/deliverable_\d{8}-\d{6}\.docx$"),
+     "离线演示产出（可复现，每次运行换时间戳）"),
+    (re.compile(r"^runtime/runlog_\d{8}-\d{6}\.json$"),
+     "离线演示取证日志（可复现，每次运行换时间戳）"),
+]
+
 
 def should_skip(name: str) -> bool:
     if name in EXCLUDE:
@@ -95,6 +110,11 @@ def should_skip(name: str) -> bool:
     if os.path.splitext(name)[1].lower() in EXCLUDE_EXT:
         return True
     return False
+
+
+def matches_exclude_re(rel: str) -> bool:
+    """按正则排除可复现产出（见 EXCLUDE_RE）。"""
+    return any(rx.match(rel) for rx, _ in EXCLUDE_RE)
 
 
 def git_tracked_files() -> list[str] | None:
@@ -183,6 +203,9 @@ def collect() -> tuple[list[dict], str]:
         parts = rel.split("/")
         if any(should_skip(p) for p in parts):
             return
+        # 可复现产出（带时间戳）整体排除
+        if matches_exclude_re(rel):
+            return
         seen.add(rel)
 
         # 优先用 git blob（平台无关）；取不到再回退工作区字节
@@ -269,6 +292,7 @@ def main(argv=None) -> int:
         "_算法": "SHA256（大写十六进制）",
         "_条目来源": source,
         "_排除项及理由": EXCLUDE,
+        "_按正则排除的可复现产出": {rx.pattern: why for rx, why in EXCLUDE_RE},
         "_统计": {"files": len(entries), "bytes": total},
         "files": entries,
     }
