@@ -1,3 +1,1 @@
-* text=auto eol=lf
-*.docx binary
-*.png binary
+# 行尾规范：仓库内一律以 LF 存储。\n# ⚠️ Windows 上若 core.autocrlf=true，Git 检出时会转成 CRLF ——\n#    这会让「对工作区文件取哈希」的做法变成**平台相关**。\n#    tools/gen_manifest.py 因此改为对 **git blob** 取哈希（见该脚本注释）。\n* text=auto eol=lf\n*.docx binary\n*.png binary\n

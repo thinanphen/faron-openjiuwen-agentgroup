@@ -128,6 +128,41 @@ def sha256_of(path: str) -> str:
     return h.hexdigest().upper()
 
 
+def sha256_of_git_blob(rel: str) -> tuple[str | None, int | None]:
+    """对 **git 内的规范内容**（blob）取 SHA256。
+
+    ⚠️ 为什么不能直接对工作区文件取哈希（本仓库实际踩到的坑）：
+
+        本仓库 `.gitattributes` 声明 `* text=auto eol=lf`（仓库内规范形式为 **LF**），
+        但若本机 `core.autocrlf=true`，Git 检出时会转成 **CRLF**。
+        于是**同一个提交在不同机器上的工作区字节不同**：
+
+            源码/Legal-Workspace/CHANGELOG.md   工作区 43,699 B  vs  blob 43,393 B（差 306）
+            资料/04-产品演示站/demo.html         工作区 531,604 B vs  blob 527,219 B（差 4,385）
+
+        对工作区取哈希 ⇒ 清单**平台相关** ⇒ 在另一台机器（或 Linux / CI）上重跑
+        `--check` 会大面积报「变更」，而这**不是仓库被改动**，只是行尾不同。
+
+    **所以：清单记录的是「git 内的内容」，不是「磁盘上的字节」。**
+    这样清单在任何平台、任何 `core.autocrlf` 设置下都可比。
+
+    Returns:
+        (sha256, bytes)；取不到时返回 (None, None) 交由调用方回退。
+    """
+    import subprocess
+    try:
+        p = subprocess.run(
+            ["git", "cat-file", "blob", f"HEAD:{rel}"],
+            cwd=REPO, capture_output=True, timeout=60,
+        )
+        if p.returncode != 0:
+            return None, None
+        data = p.stdout
+        return hashlib.sha256(data).hexdigest().upper(), len(data)
+    except Exception:
+        return None, None
+
+
 def collect() -> tuple[list[dict], str]:
     """收集清单条目。
 
@@ -149,11 +184,24 @@ def collect() -> tuple[list[dict], str]:
         if any(should_skip(p) for p in parts):
             return
         seen.add(rel)
-        entries.append({
-            "path": rel,
-            "bytes": os.path.getsize(abs_p),
-            "sha256": sha256_of(abs_p),
-        })
+
+        # 优先用 git blob（平台无关）；取不到再回退工作区字节
+        blob_sha, blob_bytes = sha256_of_git_blob(rel)
+        if blob_sha is not None:
+            entries.append({
+                "path": rel,
+                "bytes": blob_bytes,
+                "sha256": blob_sha,
+                # 便于人工区分：本行哈希取自 git 内规范内容
+                "source": "git-blob",
+            })
+        else:
+            entries.append({
+                "path": rel,
+                "bytes": os.path.getsize(abs_p),
+                "sha256": sha256_of(abs_p),
+                "source": "working-tree",
+            })
 
     tracked = git_tracked_files()
     if tracked is not None:
