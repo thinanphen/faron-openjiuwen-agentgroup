@@ -13,7 +13,7 @@
 |---|---|---|
 | [**`决策摘要.md`**](决策摘要.md) | **给建议的人**（指导老师 / 合作方） | **一页纸**。现状 + 我们要请教的 5 个问题 + 需要你投入什么。**不必读仓库** |
 | [**`接手必读.md`**](接手必读.md) | **人**（同伴） | 现在做到哪里 / 距比赛成品还差多少 / 待办 T1–T8 / 需要你拍板的 5 个方向 |
-| [**`AI工作须知.md`**](AI工作须知.md) | **AI 助手** | 仓库布局 / 7 个技术事实 / **16 条硬性纪律（D1–D16）** / 验证命令与「什么算绿」/ 已踩过的坑 |
+| [**`AI工作须知.md`**](AI工作须知.md) | **AI 助手** | 仓库布局 / 7 个技术事实 / **19 条硬性纪律（D1–D19）** / 验证命令与「什么算绿」/ 已踩过的坑 |
 | [**`任务台账.md`**](任务台账.md) | **双方** | 工单交换板：领活、交活、下指令（含指令模板） |
 
 > 你是被叫来接手工作的 AI？**请先读 `AI工作须知.md`，再去 `任务台账.md` 领一条活。**
@@ -320,7 +320,7 @@ faron-openjiuwen-agentgroup/
 │       ├── audit_citations.py     自包含 CLI（零三方依赖）
 │       └── verify_no_deps.py      零依赖自验证
 │
-├── 交付补丁/                       ★ Legal-Workspace 的 9 个提交（D9：无 BOM；含 ALL-IN-ONE 一步到位）
+├── 交付补丁/                       ★ Legal-Workspace 的 10 个提交（D9：无 BOM；含 ALL-IN-ONE 一步到位）
 │   ├── 0001-fix-P0-6-P0-7-UI.patch
 │   ├── 0002-test-EV7-evolution.ts-41-jsonBytes.patch
 │   ├── 0003-feat-EV2.patch
@@ -330,7 +330,8 @@ faron-openjiuwen-agentgroup/
 │   ├── 0007-refactor-R4-P0-5-Evolution.tsx-926-74.patch
 │   ├── 0008-feat-R3-P1-6-auditPassFloor-minSamples-100.patch
 │   ├── 0009-fix-R5-P0-1-P0-2-docs-12.patch
-│   ├── ALL-IN-ONE.patch            ★ 9 提交 mbox，一步到位
+│   ├── 0010-feat-R6-P0-1-P0-2-P1-P2.patch
+│   ├── ALL-IN-ONE.patch            ★ 10 提交 mbox，一步到位
 │   ├── 应用说明.md                  ★ 基线 + 两种方式 + 每个提交在做什么
 │   ├── 改动概览.txt
 │   └── recipe.ts / recipe.test.ts / evolutionStore.ts / evolution.test.ts

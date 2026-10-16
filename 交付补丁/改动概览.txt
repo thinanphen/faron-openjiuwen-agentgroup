@@ -1,23 +1,24 @@
+ docs/12-联邦配方进化方案.md            |  96 ++++
  package-lock.json                      | 405 +++++++++++++-
  package.json                           |   5 +-
  scripts/check-ui-copy.mjs              | 166 ++++++
- src/App.tsx                            |   5 +
+ src/App.tsx                            |  18 +-
  src/components/RecipeParamsDetails.tsx |  44 ++
  src/components/Sidebar.tsx             |   6 +-
- src/evolution-lab/Evolution.css        | 629 ++++++++++++++++++++++
- src/evolution-lab/EvolutionLab.tsx     | 926 +++++++++++++++++++++++++++++++++
+ src/evolution-lab/Evolution.css        | 642 ++++++++++++++++++++++
+ src/evolution-lab/EvolutionLab.tsx     | 944 +++++++++++++++++++++++++++++++++
  src/hooks/useRecipeStatus.ts           | 120 +++++
  src/lib/agent.ts                       | 112 +++-
- src/lib/evolution.ts                   |  17 +-
+ src/lib/evolution.ts                   | 232 +++++++-
  src/lib/evolutionStore.ts              | 242 +++++++++
  src/lib/recipe.ts                      | 198 +++++++
- src/nav.ts                             |   5 +-
- src/styles.css                         |  93 +++-
- src/views/Agent.tsx                    |  29 ++
- src/views/Evolution.tsx                | 925 +++-----------------------------
- src/views/Home.tsx                     |  13 +
- src/views/Settings.tsx                 |  94 ++++
+ src/nav.ts                             |  25 +-
+ src/styles.css                         | 124 ++++-
+ src/views/Agent.tsx                    |  29 +
+ src/views/Evolution.tsx                | 932 +++-----------------------------
+ src/views/Home.tsx                     |  39 +-
+ src/views/Settings.tsx                 | 236 +++++++++
  tests/evolution.test.ts                | 344 ++++++++++++
- tests/recipe.test.ts                   | 301 +++++++++++
+ tests/recipe.test.ts                   | 315 +++++++++++
  vite.config.ts                         |  26 +-
- 22 files changed, 3809 insertions(+), 896 deletions(-)
+ 23 files changed, 4389 insertions(+), 911 deletions(-)
