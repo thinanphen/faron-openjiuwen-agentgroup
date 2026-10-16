@@ -7,5 +7,24 @@
 #    `tools/gen_manifest.py` 因此改为对 **git blob** 取哈希（见该脚本注释），
 #    使 `资料/提交物清单.json` 在任何平台、任何 autocrlf 设置下都可比。
 * text=auto eol=lf
+
+# ---- 以下为二进制 / 不可改行尾的格式 ----
+# 这些文件的行尾是**格式的一部分**，转换会破坏内容，必须标 binary。
 *.docx binary
 *.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.pptx binary
+*.xlsx binary
+*.mp4 binary
+*.zip binary
+
+# ⚠️ 补丁 / mbox：**行尾是格式的一部分**。
+#    `git am` 对 CRLF 有一定容忍度（实测能打上），但 mbox 的
+#    `From ` 分隔行与 `---` 分隔线在转换后语义不保证，属于「不该冒的风险」。
+#    标为 binary ⇒ Git 不做任何行尾转换 ⇒ 补丁字节与 `git format-patch` 产出完全一致。
+*.patch binary
+*.mbox binary
+*.diff binary

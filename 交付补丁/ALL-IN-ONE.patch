@@ -3392,8 +3392,7 @@ Content-Transfer-Encoding: 8bit
 useTodos / useDocuments 同构：useState + useEffect + 清理 + 变更事件订阅）。
 Home.tsx 只加一行调用，在 .home-welcome 之后插入。
 
-**空值门**：
-ecipe.available && recipe.activeVersion !== null 才渲染。
+**空值门**：ecipe.available && recipe.activeVersion !== null 才渲染。
 非 Tauri（浏览器预览）与「未采纳过配方」两种情况下**整行不出现**。
 
 文案：「已根据你最近 N 次任务优化默认流程（本机保留 vN，可在「数据设置 → 数据与隐私」恢复默认）」
