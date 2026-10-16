@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-16T15:15:02+08:00",
+  "_生成时间": "2026-10-16T15:23:26+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -22,8 +22,8 @@
     "^runtime/runlog_\\d{8}-\\d{6}\\.json$": "离线演示取证日志（可复现，每次运行换时间戳）"
   },
   "_统计": {
-    "files": 92,
-    "bytes": 46994455
+    "files": 93,
+    "bytes": 47015443
   },
   "files": [
     {
@@ -46,8 +46,8 @@
     },
     {
       "path": "AI工作须知.md",
-      "bytes": 15816,
-      "sha256": "8BCE51824619F4D6ED6E0EC7F8D61A44E17AB97A183C8E56D20C0406F19E7D0C",
+      "bytes": 19751,
+      "sha256": "60CA7574282D21701CEA20AB96E3D9C5AE329560ABA6861049183D93CB446296",
       "source": "git-blob"
     },
     {
@@ -58,8 +58,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 24113,
-      "sha256": "6287481066447FDB778F11E8B78B95494CF310DD6968F6294CAB2D9C517F6264",
+      "bytes": 24766,
+      "sha256": "377A637BC8EFBEDECA914F793AC2AFA1ABA222B12AD4A3D032A4A49B5DC1816D",
       "source": "git-blob"
     },
     {
@@ -100,8 +100,8 @@
     },
     {
       "path": "docs/06-进度与交接记录.md",
-      "bytes": 16270,
-      "sha256": "836AE1670B75107DB91554885A19A6B9D3CCAC3DB4D875C5A27F12EA1D56863D",
+      "bytes": 16452,
+      "sha256": "F11CC2ABCA59B97BF603DCB3F2129D3B7982F901D2F7E747B7D2D58E761ABB56",
       "source": "git-blob"
     },
     {
@@ -226,14 +226,20 @@
     },
     {
       "path": "任务台账.md",
-      "bytes": 18549,
-      "sha256": "3A99A86A519CC120EB74D83534BA3C8C222C44DE2C75E30459211E7EEB360369",
+      "bytes": 23867,
+      "sha256": "9DAA3DCA99C6EF253D2D3853318F12CBCB92C7E9073CDF88B40A906E4B804B65",
+      "source": "git-blob"
+    },
+    {
+      "path": "决策摘要.md",
+      "bytes": 4106,
+      "sha256": "F3F8DC9D3ECA09D30CC9D060BB5C12474AEAAEBC2353B7FDCD30F1F0AC74DB50",
       "source": "git-blob"
     },
     {
       "path": "接手必读.md",
-      "bytes": 20351,
-      "sha256": "CB0F80DE4E4C089AC1495385B33DD562FDEEAA304EEC0165AF33D28F3374DECB",
+      "bytes": 20427,
+      "sha256": "8C72B23AAEAAC35E88B4FB0A472E67F7227C1EE3430C63DF1CA767E846C739D7",
       "source": "git-blob"
     },
     {
@@ -256,8 +262,8 @@
     },
     {
       "path": "提交包/04-技术方案.md",
-      "bytes": 22247,
-      "sha256": "375B6B4C5521993693AAD03394755C073B7C70776464F7CE5778B9E012C95686",
+      "bytes": 22309,
+      "sha256": "4C0611F83DCE3AB583FF2C7D94C198FBCD06FB7AA09946454C4265B64A824C60",
       "source": "git-blob"
     },
     {
@@ -269,7 +275,7 @@
     {
       "path": "提交包/06-项目文档.md",
       "bytes": 8169,
-      "sha256": "AA018F2B852005325ACFB9E781A892D299B31B23125C6F708570E2F0A90ABDE1",
+      "sha256": "2C19E3A50681FDACB7D99B70981563302DAB63541518BB66142C680517D798D3",
       "source": "git-blob"
     },
     {
@@ -340,8 +346,8 @@
     },
     {
       "path": "源码/Legal-Workspace-docs/12-联邦配方进化方案.md",
-      "bytes": 27123,
-      "sha256": "4B696023A76BCF5049F51ADD662C77E7DAC027E168005AFB5343FEC3D01D3725",
+      "bytes": 33779,
+      "sha256": "8E677571D204C927B5CE762A1327C29A68DB3824490397E8919ADE93870B6039",
       "source": "git-blob"
     },
     {

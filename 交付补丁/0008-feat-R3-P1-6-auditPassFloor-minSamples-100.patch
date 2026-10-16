@@ -1,7 +1,7 @@
 From b798321b78c45680670de857ade9d63a706e46b6 Mon Sep 17 00:00:00 2001
 From: SoHa <2380746305@qq.com>
 Date: Thu, 15 Oct 2026 23:27:28 +0800
-Subject: [PATCH 8/8] =?utf-8?q?feat(R3-P1-6):=20=E6=8A=8A=20auditPassFloor?=
+Subject: [PATCH 8/9] =?utf-8?q?feat(R3-P1-6):=20=E6=8A=8A=20auditPassFloor?=
  =?utf-8?q?=20/=20minSamples=20=E6=8E=A5=E5=85=A5=E6=89=A7=E8=A1=8C?=
  =?utf-8?q?=E9=93=BE=E8=B7=AF=20=E2=80=94=E2=80=94=20=E9=85=8D=E6=96=B9?=
  =?utf-8?q?=E6=B6=88=E8=B4=B9=20100%?=

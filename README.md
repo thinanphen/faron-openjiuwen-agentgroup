@@ -320,7 +320,7 @@ faron-openjiuwen-agentgroup/
 │       ├── audit_citations.py     自包含 CLI（零三方依赖）
 │       └── verify_no_deps.py      零依赖自验证
 │
-├── 交付补丁/                       ★ Legal-Workspace 的 7 个提交补丁（D9：无 BOM）
+├── 交付补丁/                       ★ Legal-Workspace 的 9 个提交（D9：无 BOM；含 ALL-IN-ONE 一步到位）
 │   ├── 0001-fix-P0-6-P0-7-UI.patch
 │   ├── 0002-test-EV7-evolution.ts-41-jsonBytes.patch
 │   ├── 0003-feat-EV2.patch
@@ -328,11 +328,18 @@ faron-openjiuwen-agentgroup/
 │   ├── 0005-feat-R4-P0-1-P0-2-1.patch
 │   ├── 0006-feat-R4-P0-3-P0-4.patch
 │   ├── 0007-refactor-R4-P0-5-Evolution.tsx-926-74.patch
+│   ├── 0008-feat-R3-P1-6-auditPassFloor-minSamples-100.patch
+│   ├── 0009-fix-R5-P0-1-P0-2-docs-12.patch
+│   ├── ALL-IN-ONE.patch            ★ 9 提交 mbox，一步到位
+│   ├── 应用说明.md                  ★ 基线 + 两种方式 + 每个提交在做什么
 │   ├── 改动概览.txt
 │   └── recipe.ts / recipe.test.ts / evolutionStore.ts / evolution.test.ts
 │
-│   └── 应用方式：for p in 交付补丁/*.patch; do git am "$p"; done
+│   └── 应用方式（两种，任选）：
+│         一步到位：  git am 交付补丁/ALL-IN-ONE.patch
+│         按序可诊断：for p in 交付补丁/0*.patch; do git am "$p" || break; done
 │       ⚠️ 基线 = 远端 feature/赛事版 的 a9344c1；远端前进后需先 rebase 再重生成
+│       ✅ 两种方式均已在干净 clone 上实测：9 提交全落盘 → 75 passed / 83 modules / 6-6
 │
 ├── 资料/                          ★ 参赛材料（提交包整理版）
 │   ├── README.md                  材料导航
