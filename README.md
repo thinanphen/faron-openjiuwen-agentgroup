@@ -15,6 +15,7 @@
 | [**`接手必读.md`**](接手必读.md) | **人**（同伴） | 现在做到哪里 / 距比赛成品还差多少 / 待办 T1–T8 / 需要你拍板的 5 个方向 |
 | [**`AI工作须知.md`**](AI工作须知.md) | **AI 助手** | 仓库布局 / 7 个技术事实 / **19 条硬性纪律（D1–D19）** / 验证命令与「什么算绿」/ 已踩过的坑 |
 | [**`任务台账.md`**](任务台账.md) | **双方** | 工单交换板：领活、交活、下指令（含指令模板） |
+| [**`答辩Q&A预案.md`**](答辩Q&A预案.md) | **要上台讲的人** | 10 个必答题的标准答（每答 ≤150 字）+ 5 条「不要踩」 |
 
 > 你是被叫来接手工作的 AI？**请先读 `AI工作须知.md`，再去 `任务台账.md` 领一条活。**
 > 不要凭猜测改这个仓库——里面有两条「踩了就是事故」的纪律（不得虚报、不得弱化「第9999条」反例）。
@@ -123,8 +124,10 @@ python tools/run_all_checks.py     # 期望：9 通过 / 0 未通过
 
 | 组件 | 当前状态 | 说明 |
 |---|---|---|
-| 任务板工具 `create_task` / `claim_task` / `view_task` / `member_complete_task` | 🚧 **规划中** | 框架原生提供，本仓库**尚未真正驱动**；见下方「运行层现状」 |
-| 消息工具 `send_message` / `list_members` | 🚧 **规划中** | 同上 |
+| `create_task`（任务板建单） | ✅ **已真实驱动** | 经 `TeamTaskManager.add_graph` 真实落库；见「运行层现状」 |
+| `send_message` / `broadcast_message`（成员消息） | ✅ **已真实驱动** | 经 `TeamMessageManager` 真实流转；见「运行层现状」 |
+| `claim_task` / `member_complete_task`（成员领活/交付） | 🚧 **未跑通** | 框架原生提供；本机实测成员被 pause 后未被唤醒，**尚无运行事实** |
+| HITL 审批（`verify_task`） | 🚧 **未跑通** | 依赖上一条，未触发 |
 | `dispatch_mode="scheduled"` | 🚧 **规划中** | 当前实例为 `autonomous`（默认值） |
 | `enable_swarmflow` | 🚧 **规划中** | 未启用 |
 | `model_router` / `model_intelli_router` | 🚧 **规划中** | 未配置；当前用 `model_pool` |
@@ -134,19 +137,32 @@ python tools/run_all_checks.py     # 期望：9 通过 / 0 未通过
 
 ### 运行层现状（如实说明）
 
-**装配层是真的，运行层尚未跑通。**
+> **模型为本地确定性桩（stub），框架任务板与成员消息为真实流转。**
+
+**装配层是真的；运行层只跑通「主理侧」的一半，成员侧未跑通。**
 
 - **装配层**：`probe_build.py` 逐成员验证——5 个 agent 成员各自解析到
   **自己的 spec 与工具集**（不同 spec 对象数 5/5），`build()` 成功构造 `TeamAgent`。
   这条有测试防线：`tests/test_assembly.py`（9 组）。
-- **运行层**：`run_offline_demo.py` 演示的是**六步流程与两段自检**，
-  其工具调用是**顺序 `await tool.invoke()`**，**并未真正驱动框架的任务板与成员消息**。
-  因此上表中的任务板 / `send_message` / HITL 审批虽已声明，**尚无运行事实**。
-- **在线运行**：`run_online.py` 已就绪但**未取得模型 Key**，
-  故**零成功运行记录**，不得声称已跑通多智能体协同。
+- **运行层（已跑通的部分）**：`run_stub_online.py` 用**本地确定性 OpenAI 桩**
+  （`tools/stub_llm_server.py`，零三方依赖）驱动**真实 `TeamAgent`**：
+  主理 `build_team` 组队（6 成员全部创建成功）→ `create_task` 建单
+  → `send_message` 通知，全部经框架自己的 manager **真实执行**。
+  实测任务落库为 `team_task_*.task-1 status=pending`、`task-2 status=blocked`，
+  消息落库 5 条未读，轨迹见 `runtime/coordination_*.json`。
+- **运行层（未跑通的部分）**：成员侧的 `claim_task` / `member_complete_task`
+  **一次都没发生**。已定位原因（不是没试）：框架在 `build_team` 之后对成员执行
+  `finalize_member → pause`，此后成员退订事件；`TASK_CREATED` 这条唯一能唤醒
+  空闲成员的事件（`TaskBoardHandler._TEAMMATE_NUDGE_EVENTS`）在订阅之前发出后
+  **不补发**，广播与定向消息均未能把成员拉起。**结论：成员协同闭环未验证。**
+- **在线运行**：`run_online.py` 已就绪但**零成功运行记录**，不得声称已跑通多智能体协同。
+  本轮另查明一个**环境级故障**：本机 `NO_PROXY` 含带方括号的 IPv6（`[::1]`），
+  会让 `openai` 3.x 依赖的 `httpx2` 在构造客户端时报
+  `InvalidURL: Invalid port: ':1]'` —— **任何** OpenAI 兼容端点都无法发请求，
+  与 Key 无关。详见 `docs/08-运行层实测记录.md`。
 
-> 这条边界将在「技术方案」正文中同样如实标注。
-> 我们宁可把「装配已完成、运行闭环待 DEMO 阶段完成」写清楚，
+> 这条边界在「技术方案」正文中同样如实标注。
+> 我们宁可把「主理侧已跑通、成员侧未跑通」写清楚，
 > 也不虚报一次不存在的协同运行。
 
 ---
@@ -200,6 +216,34 @@ python run_offline_demo.py
 > **修 E8 说明**：原 README 写「期望：6 步全绿」，容易被误读为「自检应通过」。
 > 实际 STEP 5 第一段必然 `ok=false`（埋雷被点名），脚本仍返回 0 —— 这是**设计意图**，
 > 不是失败。现已在上面写清判据。
+
+### 运行层实测（桩模型 + 真实 TeamAgent，**不需要 Key**）
+
+```bash
+# 4. 桩自检（不监听端口、不联网、零三方依赖）
+python tools/stub_llm_server.py --selftest   # 期望：5 通过 / 0 失败
+
+# 5. 驱动真实 TeamAgent（约 5 分钟），产出 runtime/coordination_*.json
+python run_stub_online.py --timeout 340
+#    期望：create_task ✅ / send_message ✅ / claim_task ❌ / member_complete_task ❌
+#    👆 最后两项是**当前真实水平**，没有修饰。原因见 docs/08-运行层实测记录.md
+
+# 6. 直查框架库，验证任务板/消息真的落库了
+python tools/inspect_team_db.py
+```
+
+> **口径**（对外只用这一句）：**模型为本地确定性桩（stub），框架任务板与成员消息为真实流转。**
+> `has_real_model` 为 `true` 仅表示注入了非占位符的桩 Key，**不表示**已接入真实模型。
+
+### 一键验证（等同 CI 的「每次提交前全绿」）
+
+```bash
+./verify.ps1    # Windows
+./verify.sh     # Linux / macOS
+```
+
+内部调 `tools/run_all_checks.py`（10 步，含**工作区干净闸门**）。
+**exit 0 = 全绿；非 0 并指出是哪一项。** 本项目**未启用 GitHub Actions**，原因见 `提交包/README.md`。
 
 ### 在线运行（需要模型接口）
 
@@ -294,7 +338,8 @@ faron-openjiuwen-agentgroup/
 │   ├── 04-AgentGroup实现说明.md
 │   ├── 05-零Key复现路径.md         哪部分零依赖可复现、哪部分需要框架
 │   ├── 06-进度与交接记录.md        逐项验收证据（证据流水，非接手入口）
-│   └── 07-JiuwenSwarm接入评估.md   JiuwenSwarm/SkillHub 评估与未验证项
+│   ├── 07-JiuwenSwarm接入评估.md   JiuwenSwarm/SkillHub 评估与未验证项
+│   └── 08-运行层实测记录.md        ★ 第八轮：跑通什么/没跑通什么 + 5 个坑 + 环境级故障
 │
 ├── src/faron_agentgroup/          ★ Agent Group 实现
 │   ├── __init__.py
@@ -311,8 +356,15 @@ faron-openjiuwen-agentgroup/
 │   └── verify_zero_dep.py         零依赖验证（屏蔽全部框架 import）
 ├── probe_build.py                 最小构建探针（逐成员 spec 解析）
 ├── run_offline_demo.py            端到端演示（不需要模型）
-├── run_online.py                  在线运行（需要模型）
-├── runtime/                       产出：交付物 .docx + 取证日志 .json
+├── run_online.py                  在线运行（需要真模型；**零成功记录**）
+├── run_stub_online.py             运行层实测：桩模型 + 真实 TeamAgent（生成 coordination_*.json）
+├── verify.ps1 / verify.sh         ★ 一键验证薄包装（exit 0 = 全绿；非 0 并指出哪项）
+├── tools/
+│   ├── stub_llm_server.py         本地确定性 OpenAI 桩（零三方依赖，支持 SSE）
+│   ├── inspect_team_db.py         直查框架团队库（任务板/成员/消息的真实状态）
+│   ├── gen_manifest.py            生成 资料/提交物清单.json
+│   └── run_all_checks.py          全部验证（10 步，含工作区干净闸门）
+├── runtime/                       产出：交付物 .docx + 取证日志 .json + coordination_*.json
 │
 ├── skill/citation-audit/          ★ 零依赖 Skill 包（SkillHub 可分发）
 │   ├── SKILL.md                   触发词 / 参数 / 返回 / 已知边界

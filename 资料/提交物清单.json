@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-17T00:36:02+08:00",
+  "_生成时间": "2026-10-18T02:02:17+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -22,8 +22,8 @@
     "^runtime/runlog_\\d{8}-\\d{6}\\.json$": "离线演示取证日志（可复现，每次运行换时间戳）"
   },
   "_统计": {
-    "files": 93,
-    "bytes": 47031900
+    "files": 100,
+    "bytes": 47129201
   },
   "files": [
     {
@@ -40,8 +40,8 @@
     },
     {
       "path": ".gitignore",
-      "bytes": 1114,
-      "sha256": "02C95AEE2B0F165AA76122FEA17CA026EC381C4701A1EA0F570F887D7063241B",
+      "bytes": 1303,
+      "sha256": "D6E9A28C60CB8CB194F6F7B84B86C4A8528254EB7D028F81620FE1E025F1DC9B",
       "source": "git-blob"
     },
     {
@@ -58,8 +58,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 25383,
-      "sha256": "6CE2BB87BF05089A833EAC6C710DC54A8212FA82DA104216446B7DCB9314C113",
+      "bytes": 28993,
+      "sha256": "3E41BE3A3B1D167D53C4D55F9B0C55E47A1727A353E766FAB4557B01885624D2",
       "source": "git-blob"
     },
     {
@@ -111,6 +111,12 @@
       "source": "git-blob"
     },
     {
+      "path": "docs/08-运行层实测记录.md",
+      "bytes": 9330,
+      "sha256": "2BBD02B577CC54E80A0A1F597A1C802B8BE5AEC93999599CDBB7E97AD99EC2CE",
+      "source": "git-blob"
+    },
+    {
       "path": "probe_build.py",
       "bytes": 5292,
       "sha256": "DAC5EAE29352CA4DA34A986FA6F80E6DFC77B6B9E70FD92B96624CBDC52A3D92",
@@ -118,8 +124,8 @@
     },
     {
       "path": "requirements.txt",
-      "bytes": 933,
-      "sha256": "E1028942514CEA489AC1CFE08F98510FD617147911FFEC94D771DE7999DFC9D8",
+      "bytes": 1844,
+      "sha256": "CFD23A6B9AD12672090C4ACFA220D222B8D32EC4FEBDCB155F6082B071662DBF",
       "source": "git-blob"
     },
     {
@@ -132,6 +138,12 @@
       "path": "run_online.py",
       "bytes": 4346,
       "sha256": "5CD3C1AD77E0F2C573DD977F12E56AADDFB82014EFE8DE15FFAF79AAEF4D21F1",
+      "source": "git-blob"
+    },
+    {
+      "path": "run_stub_online.py",
+      "bytes": 27726,
+      "sha256": "B05DFCC44804AF639491AB4EDF3B31DA76707E95901259C819547CDF21BD66C9",
       "source": "git-blob"
     },
     {
@@ -219,15 +231,39 @@
       "source": "git-blob"
     },
     {
+      "path": "tools/inspect_team_db.py",
+      "bytes": 6849,
+      "sha256": "D76B79D8F1E0B9883677A6C87755B45E8AF4A30DA4F8CAF430D5AB20220FE6E1",
+      "source": "git-blob"
+    },
+    {
       "path": "tools/run_all_checks.py",
-      "bytes": 9715,
-      "sha256": "8A2B0EC126DB4EC751928C4D949A54C6F563C66EF24101109AF6C89799BBFBD8",
+      "bytes": 9738,
+      "sha256": "CE246E925D04A712486DDA8F328D4FC3424BC7ADAD73EC81448F9BC340FFA6F6",
+      "source": "git-blob"
+    },
+    {
+      "path": "tools/stub_llm_server.py",
+      "bytes": 27658,
+      "sha256": "554E837E21229E2CA7918BB167914CE84D18714B424B1DBCAB4D1177B24D6B92",
+      "source": "git-blob"
+    },
+    {
+      "path": "verify.ps1",
+      "bytes": 1996,
+      "sha256": "B5A09C381A7A8CF783BC81FA88D6362DDF915345CFA40D7B3FDE8722CFF35BFD",
+      "source": "git-blob"
+    },
+    {
+      "path": "verify.sh",
+      "bytes": 1514,
+      "sha256": "D78FEB739FA09B965F87709DE9C01B4608AA80BCBDE766989DDB945D1F357ABA",
       "source": "git-blob"
     },
     {
       "path": "任务台账.md",
-      "bytes": 32206,
-      "sha256": "C73A2044A79D0D03D9228ACC230BD6881EEEE2924DEE3450B29A9AE8C4785E55",
+      "bytes": 39601,
+      "sha256": "D4D77086EF5E7C54D94093A652CC94138E2431B6C2F577F129DBDB3462F37A0E",
       "source": "git-blob"
     },
     {
@@ -262,8 +298,8 @@
     },
     {
       "path": "提交包/04-技术方案.md",
-      "bytes": 22309,
-      "sha256": "4C0611F83DCE3AB583FF2C7D94C198FBCD06FB7AA09946454C4265B64A824C60",
+      "bytes": 23841,
+      "sha256": "DE0CF356CF3D459746E4E79AFBC59EC8112F9877425D1FF48824E2BF176AC0E6",
       "source": "git-blob"
     },
     {
@@ -280,8 +316,8 @@
     },
     {
       "path": "提交包/README.md",
-      "bytes": 4756,
-      "sha256": "7C60895698D0D4099ECC1E8B64828C6DC451134C32E1E58DC1420CCF82E2CF21",
+      "bytes": 6642,
+      "sha256": "1B6A742CB162E8177C938CA1BCB18D9E0422ED169253D578093C62750964E7D5",
       "source": "git-blob"
     },
     {
@@ -426,6 +462,12 @@
       "path": "源码/README.md",
       "bytes": 4935,
       "sha256": "9B280099F55497DA2221B8D011C4920179A2C00B96936E34DB6D57BEC3081C23",
+      "source": "git-blob"
+    },
+    {
+      "path": "答辩Q&A预案.md",
+      "bytes": 6682,
+      "sha256": "753C6B7AB508945F23DB991BF27A3E1711E682AC9975765A6C61DFBFCBF71C7F",
       "source": "git-blob"
     },
     {

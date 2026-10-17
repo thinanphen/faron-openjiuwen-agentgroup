@@ -20,3 +20,19 @@ python-docx>=1.2.0
 # run_online.py 的 --probe 用 aiohttp 发最小请求探测模型端点；
 # 原 requirements 漏列，导致 `pip install -r` 后该脚本无法运行。
 aiohttp>=3.11.12
+
+# ---- 框架任务板/消息库的异步 SQLite 驱动（修 E13）----
+# 缺这个，TeamAgent 初始化任务板时会报：
+#   ModuleNotFoundError: No module named 'aiosqlite'
+# 注意：openjiuwen 没把 aiosqlite 放进基础依赖，
+# 所以必须显式声明 —— 否则 `pip install -r` 之后一跑运行层就崩。
+aiosqlite>=0.22.0
+
+# ⚠️ 已知环境级坑（不是本仓库的 bug，但会让真实模型跑不起来）：修 E14
+# openai 3.x 改用 httpx2，而 httpx2 会把 NO_PROXY 的每一项当 URL 模式解析。
+# 若 NO_PROXY 含**带方括号的 IPv6**（如 [::1]），构造客户端时会抛
+#   httpx2.InvalidURL: Invalid port: ':1]'
+# 结果：**任何** OpenAI 兼容端点都发不出请求，与 Key 无关。
+# 自检：python -c "import openai; openai.AsyncOpenAI(api_key='x')"
+# 修法：把 NO_PROXY 里的 [::1] 去掉（run_stub_online.py 已自动修正）。
+

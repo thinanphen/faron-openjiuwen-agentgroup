@@ -131,7 +131,7 @@ def prune_runtime() -> list[str]:
         return []
 
     handled: list[str] = []
-    for pattern in ("deliverable_*.docx", "runlog_*.json"):
+    for pattern in ("deliverable_*.docx", "runlog_*.json", "coordination_*.json"):
         for f in sorted(glob.glob(os.path.join(rt, pattern))):
             name = os.path.basename(f)
             rel = f"runtime/{name}"

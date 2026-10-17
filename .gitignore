@@ -85,3 +85,7 @@ runtime/skills-visibility.json
 
 # 暂存的 CI 工作流（待补 workflow scope 后移回 .github/workflows/）
 _hold/
+
+# 运行层实测用的临时工作区：框架会往里写 AGENT.md / SOUL.md / memory 等一堆文件，
+# 属于一次性的运行期垃圾，不纳入版本库
+runtime/stub-workspace/
