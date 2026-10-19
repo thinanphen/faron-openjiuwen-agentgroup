@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-19T13:57:15+08:00",
+  "_生成时间": "2026-10-19T14:05:51+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -23,7 +23,7 @@
   },
   "_统计": {
     "files": 101,
-    "bytes": 47131764
+    "bytes": 47160760
   },
   "files": [
     {
@@ -58,8 +58,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 28993,
-      "sha256": "3E41BE3A3B1D167D53C4D55F9B0C55E47A1727A353E766FAB4557B01885624D2",
+      "bytes": 29873,
+      "sha256": "15504C27847C29FFA5A59BBD4E8AD99B44C552B2B731C4E20705B1EFFB4F900E",
       "source": "git-blob"
     },
     {
@@ -112,8 +112,8 @@
     },
     {
       "path": "docs/08-运行层实测记录.md",
-      "bytes": 9330,
-      "sha256": "2BBD02B577CC54E80A0A1F597A1C802B8BE5AEC93999599CDBB7E97AD99EC2CE",
+      "bytes": 14430,
+      "sha256": "5BACBFD92A8E639A5462221946F84A24C8DDDF2E9DBD68BC28A5C513A32C7586",
       "source": "git-blob"
     },
     {
@@ -142,8 +142,8 @@
     },
     {
       "path": "run_stub_online.py",
-      "bytes": 27726,
-      "sha256": "B05DFCC44804AF639491AB4EDF3B31DA76707E95901259C819547CDF21BD66C9",
+      "bytes": 31153,
+      "sha256": "C24107FA32CC7878EEBC6C750ECF8383D327107D16E35FC06F37B666FF5E94B1",
       "source": "git-blob"
     },
     {
@@ -232,15 +232,15 @@
     },
     {
       "path": "tools/inspect_team_db.py",
-      "bytes": 6849,
-      "sha256": "D76B79D8F1E0B9883677A6C87755B45E8AF4A30DA4F8CAF430D5AB20220FE6E1",
+      "bytes": 7706,
+      "sha256": "BA7644FEC9863017AA52F67205C20AD4B3DC2C4676E603EB39C78E9D6F29DB62",
       "source": "git-blob"
     },
     {
       "path": "tools/reset_team_db.py",
       "bytes": 2563,
       "sha256": "148C8CBC2162D122DB0FD8DF9C09FD20674D12E3ABBCCE7BA642334B1A0CDC05",
-      "source": "working-tree"
+      "source": "git-blob"
     },
     {
       "path": "tools/run_all_checks.py",
@@ -250,14 +250,14 @@
     },
     {
       "path": "tools/stub_llm_server.py",
-      "bytes": 27658,
-      "sha256": "554E837E21229E2CA7918BB167914CE84D18714B424B1DBCAB4D1177B24D6B92",
+      "bytes": 35129,
+      "sha256": "21596807306A70E2BE85FC3900EEA9752E6C8E62E5D581B990140A61F80384C5",
       "source": "git-blob"
     },
     {
       "path": "verify.ps1",
-      "bytes": 1996,
-      "sha256": "B5A09C381A7A8CF783BC81FA88D6362DDF915345CFA40D7B3FDE8722CFF35BFD",
+      "bytes": 7124,
+      "sha256": "1FCB834DCE0FE4BBC6B340AFAF9DC15B9DCF3C7550A08BC4ADA7969DCAAA71C4",
       "source": "git-blob"
     },
     {
@@ -268,8 +268,8 @@
     },
     {
       "path": "任务台账.md",
-      "bytes": 39601,
-      "sha256": "D4D77086EF5E7C54D94093A652CC94138E2431B6C2F577F129DBDB3462F37A0E",
+      "bytes": 45734,
+      "sha256": "480DA51D69271644443EAA809591AAB64D7089C96158908AD957A312CF857AB2",
       "source": "git-blob"
     },
     {
