@@ -169,8 +169,20 @@ def main() -> int:
     args = ap.parse_args()
 
     db = Path(args.db) if args.db else find_db()
-    if db is None:
-        print("  ❌ 找不到 team.db；用 --db 指定")
+    if db is None or not db.exists():
+        # ⚠️ 这条提示是给人看的，必须**直接告诉他下一步做什么**。
+        #    全新 clone 上必然走到这里（还没跑过任何东西，库就不存在）；
+        #    如果只丢一句"用 --db 指定"，第一次用的人会卡在这儿。
+        print("  ❌ 还没有团队库 —— 说明这台机器还没跑过运行层。")
+        print()
+        print("  请先执行（真实驱动一次 TeamAgent，约 5 分钟）：")
+        print("      python run_stub_online.py --timeout 340")
+        print()
+        print("  跑完后框架会在下面这个位置建库，再用本工具查看：")
+        print(f"      {Path.home() / '.openjiuwen' / '.agent_teams' / 'team.db'}")
+        print()
+        print("  只想查看别处已有的库，用 --db 显式指定：")
+        print("      python tools/inspect_team_db.py --db <team.db 路径>")
         return 1
     return show(db, args.team)
 

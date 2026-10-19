@@ -114,6 +114,8 @@ class Recorder:
         "settle_review": ("hitl_verify", "hitl"),
         "send_message": ("send_message", "message"),
         "broadcast_message": ("broadcast_message", "message"),
+        # 成员动态召唤（R9 · P0-2）。它在 TeamBackend 上，不在 TaskManager 上。
+        "spawn_member": ("spawn_member", "member"),
     }
 
     def __init__(self) -> None:
@@ -149,6 +151,14 @@ class Recorder:
             print(f"{NG} 无法导入框架 manager：{exc}")
             return []
 
+        # TeamBackend.spawn_member 在另一个模块（R9 · P0-2 需要看它成没成）
+        TeamBackend = None
+        try:
+            from openjiuwen.agent_teams.tools.team import TeamBackend as _TB
+            TeamBackend = _TB
+        except Exception:  # noqa: BLE001
+            pass
+
         targets = [
             (TeamTaskManager, "add_graph"),
             (TeamTaskManager, "add"),
@@ -165,6 +175,8 @@ class Recorder:
             (TeamMessageManager, "send_message"),
             (TeamMessageManager, "broadcast_message"),
         ]
+        if TeamBackend is not None:
+            targets.append((TeamBackend, "spawn_member"))
 
         mounted: list[str] = []
         for cls, meth in targets:
@@ -479,13 +491,85 @@ async def _drive(group: Any, timeout: float, rec: Recorder) -> tuple[int, list[s
         return 4, chunks, f"{type(exc).__name__}: {exc}", {}
 
 
+def verify_trace(path: str) -> int:
+    """只读一份已有轨迹，打印 summary / checks / 是否与期望一致。
+
+    为什么需要（R9 · P1-2）：
+        复核方第一眼通常用 `grep claim_task` 数次数 —— 会**严重高估**，
+        因为 "claim_task" / "member_complete_task" 这些词会出现在
+        **主理自己的提示语**里（"请 view_task 后 claim_task 开工…"）。
+        实测被误导过一次：grep 数出 claim_task=10、member_complete_task=9，
+        而真值是 0。
+
+        唯一可信的是轨迹自带的 `summary.by_event` / `summary.required` / `checks`
+        —— 那是记录器按**框架 manager 的真实调用**计数的，不是文本匹配。
+
+    用法：
+        python run_stub_online.py --verify runtime/coordination_<ts>.json
+    """
+    import json as _json
+
+    p = Path(path)
+    if not p.is_absolute():
+        p = Path(__file__).resolve().parent / p
+    if not p.exists():
+        print(f"  ❌ 轨迹文件不存在：{p}")
+        return 2
+
+    data = _json.loads(p.read_text(encoding="utf-8"))
+    summary = data.get("summary") or {}
+    required = summary.get("required") or {}
+    checks = data.get("checks") or {}
+    by_event = summary.get("by_event") or {}
+
+    print("=" * 70)
+    print(f" 轨迹复核：{p.name}")
+    print("=" * 70)
+    print(f" 生成时间：{data.get('generated_at')}")
+    print(f" 耗时    ：{data.get('elapsed_sec')}s")
+    print(f" 口径    ：{data.get('_口径')}")
+    print(f" has_real_model：{data.get('_has_real_model')}")
+    print(f"   ↳ {data.get('_注意_has_real_model')}")
+    print()
+    print(" 事件计数（summary.by_event，**框架 manager 真实调用**）：")
+    for k in sorted(by_event):
+        print(f"   {k:24} {by_event[k]:4}")
+    print()
+    print(" 四项验收（checks）：")
+    all_ok = True
+    for k, v in checks.items():
+        mark = "✅" if v else "❌"
+        if not v:
+            all_ok = False
+        print(f"   {mark} {k}")
+    print()
+    print(" required 细节：")
+    for k in ("create_task", "claim_task", "member_complete_task", "send_message", "hitl_verify"):
+        if k in required:
+            print(f"   {k:24} {required[k]:4}")
+    print()
+    print(" ⚠️ 不要用 `grep claim_task` 数次数 —— 工具名会出现在主理的提示语里，")
+    print("    那种数法会严重高估（实测 grep 得 10，真值 0）。以上面的数字为准。")
+    print("=" * 70)
+    if all_ok:
+        print(" 结论：四项验收全部通过。")
+        return 0
+    print(" 结论：有未通过项（这是当前真实水平，不修饰）。")
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="用本地桩把 openJiuwen 编排层真跑一遍")
     ap.add_argument("--port", type=int, default=8801)
     ap.add_argument("--external-stub", action="store_true", help="复用已在跑的桩")
     ap.add_argument("--timeout", type=float, default=180.0)
     ap.add_argument("--out-dir", default="runtime")
+    ap.add_argument("--verify", metavar="JSON",
+                    help="只读复核一份已有轨迹（不跑模型），打印 summary/checks")
     args = ap.parse_args(argv)
+
+    if args.verify:
+        return verify_trace(args.verify)
 
     port = args.port
     print("=" * 74)

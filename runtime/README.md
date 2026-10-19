@@ -6,7 +6,34 @@
 |---|---|---|
 | `deliverable_<时间戳>.docx` | `run_offline_demo.py` | 五段式文书 + **2 张 Word 原生表格** |
 | `runlog_<时间戳>.json` | `run_offline_demo.py` | 六步全过程取证日志 |
+| `coordination_<时间戳>.json` | `run_stub_online.py` | 运行层实测轨迹：框架任务板 / 成员消息 / HITL 的**真实调用**记录 |
 | `skills-visibility.json` | 运行时 | openJiuwen 技能可见性快照（小文件，随仓库保留） |
+
+---
+
+## ⚠️⚠️ 看 `coordination_*.json` 时最容易犯的错：**别用 grep 数事件次数**
+
+`claim_task` / `member_complete_task` 这些**工具名会出现在主理自己的提示语里**
+（比如「请 view_task 后 claim_task 开工，完成后 member_complete_task 交付」）。
+
+用 `grep -c claim_task` 数出来的数字**严重高估**：
+
+| 数法 | `claim_task` | `member_complete_task` |
+|---|---|---|
+| `grep claim_task` | **10** ❌ | **9** ❌ |
+| 轨迹里的 `summary.by_event` / `summary.required` | **0** ✅ | **0** ✅ |
+
+**唯一可信的是轨迹自带的 `summary.by_event`、`summary.required`、`checks` 三段**
+—— 那是记录器挂在框架 manager 方法上按**真实调用**计数的，不是文本匹配。
+
+不想自己解析 JSON，直接：
+
+```bash
+python run_stub_online.py --verify runtime/coordination_<时间戳>.json
+```
+
+> 这条教训是复盘方（`lin612320` 一侧）第一眼用 grep 差点报「全过了」得来的。
+> 写在这里，免得下一个接手的人踩同一个坑。
 
 ---
 

@@ -1,0 +1,943 @@
+{
+  "_口径": "模型为本地确定性桩（stub），框架任务板与成员消息为真实流转。",
+  "_本轨迹证明": "openJiuwen TeamAgent 的任务板 / 成员消息 / HITL 闸门真实流转",
+  "_本轨迹不证明": "模型能力。推理来自本地确定性桩，不能替代真实模型 Key",
+  "_has_real_model": true,
+  "_注意_has_real_model": "此值为 True 仅因注入了非占位的桩 Key；它**不表示**已接入真实模型。材料中不得据此声称已接入真实模型。",
+  "generated_at": "2026-10-19T13:10:07",
+  "elapsed_sec": 345.1,
+  "stub": {
+    "note": "模型为本地确定性桩（stub），框架任务板与成员消息为真实流转。",
+    "api_base": "http://127.0.0.1:8801/v1",
+    "models": [
+      "faron-stub-strong"
+    ]
+  },
+  "commission": "我方（中国某制造企业）与日本某商社设立合资公司，合资合同履行中出现出资迟延与经营分歧。请出具《合同审查意见书》：①日方出资迟延是否构成违约、我方能否请求继续履行；②准据法与管辖约定是否有效；③风险条款与修改建议。引用法条必须来自本地法库检索结果。",
+  "team": {
+    "tools_registered": {
+      "total": 12,
+      "ok": 12,
+      "skipped": 0,
+      "failed": 0,
+      "errors": [],
+      "names": [
+        "laws_search",
+        "law_by_id",
+        "laws_country_preview",
+        "template_load",
+        "translate_text",
+        "audit_citations",
+        "audit_applicability",
+        "returned_refs_summary",
+        "kg_find_case",
+        "kg_query",
+        "kg_add_candidate",
+        "kg_confirm_edge"
+      ]
+    },
+    "enable_hitt": true,
+    "describe": {
+      "team_name": "faron_wenshu_team",
+      "framework": "openjiuwen.agent_teams",
+      "leader": "team_leader",
+      "members": [
+        {
+          "name": "…",
+          "display": "…",
+          "role": "…",
+          "desc": "…"
+        },
+        {
+          "name": "…",
+          "display": "…",
+          "role": "…",
+          "desc": "…"
+        },
+        {
+          "name": "…",
+          "display": "…",
+          "role": "…",
+          "desc": "…"
+        },
+        {
+          "name": "…",
+          "display": "…",
+          "role": "…",
+          "desc": "…"
+        },
+        {
+          "name": "…",
+          "display": "…",
+          "role": "…",
+          "desc": "…"
+        }
+      ],
+      "tools": [
+        "laws_search",
+        "law_by_id",
+        "laws_country_preview",
+        "template_load",
+        "translate_text",
+        "audit_citations"
+      ],
+      "tool_count": 12,
+      "tool_registration": {
+        "ok": 12,
+        "skipped": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "enable_hitt": true
+    }
+  },
+  "summary": {
+    "total_events": 19,
+    "by_event": {
+      "spawn_member": 7,
+      "broadcast_message": 7,
+      "create_task": 1,
+      "update_task": 1,
+      "assign_task": 1,
+      "send_message": 2
+    },
+    "failed_events": 0,
+    "required": {
+      "create_task": 1,
+      "claim_task": 0,
+      "member_complete_task": 0,
+      "send_message": 9,
+      "hitl_verify": 0
+    }
+  },
+  "checks": {
+    "主理建单 create_task ≥1": true,
+    "成员领活 claim_task ≥1": false,
+    "成员交付 member_complete_task ≥1": false,
+    "成员消息 send_message ≥1": true
+  },
+  "events": [
+    {
+      "seq": 1,
+      "t_ms": 1962,
+      "event": "spawn_member",
+      "kind": "member",
+      "args": [
+        {
+          "_type": "TeamBackend",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "is_leader": true,
+          "leader_member_name": "team_leader",
+          "_workspace_manager": null,
+          "_leader_name_cache": null,
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "member_name": "team_leader",
+        "display_name": "小元·主理",
+        "agent_card": {
+          "id": "…",
+          "name": "…",
+          "description": "…",
+          "input_params": "…",
+          "output_params": "…",
+          "interface_url": "…"
+        },
+        "desc": "涉外资深合伙人，负责规划、分派与汇总，对最终交付质量负责。",
+        "prompt": "你是法律工作流规划器。根据用户的模糊需求，把任务拆成 3~6 个可执行步骤。\n必须返回合法 JSON（不要任何额外文字），结构：\n{\"steps\":[{\"seq\":0,\"name\":\"步骤名\",\"role\":\"planner|retriever|drafter|qa\",\"tool\":\"laws_search|law_by_id|template_load|null\",\"params\":{},\"need_confirm\":false}]}\n规则：① 检索类步骤的 role 必须是 retriever 且带 tool；\n② 起草类步骤 role=drafter；③ 质检类步骤 role=qa；\n④…(+743)",
+        "status": "busy",
+        "execution_status": "running",
+        "mode": "build_mode"
+      },
+      "result": "<MemberOpResult>",
+      "error": null
+    },
+    {
+      "seq": 2,
+      "t_ms": 1979,
+      "event": "spawn_member",
+      "kind": "member",
+      "args": [
+        {
+          "_type": "TeamBackend",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "is_leader": true,
+          "leader_member_name": "team_leader",
+          "_workspace_manager": null,
+          "_leader_name_cache": null,
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "member_name": "law_retriever",
+        "display_name": "检索员·民商",
+        "agent_card": {
+          "id": "…",
+          "name": "…",
+          "description": "…",
+          "input_params": "…",
+          "output_params": "…",
+          "interface_url": "…"
+        },
+        "desc": "在内置日美法库中检索真实法条并回传溯源信息。",
+        "prompt": "你是法律检索员：基于上一步要点，选择恰当工具检索真实法条；只汇报工具真实返回的条文，禁止编造条文号与内容。\n\n你是法元 · Faron Agent Group 的检索员成员。\n\n工具：laws_search（关键词检索）、law_by_id（按 ID 回读）、laws_country_preview（法域概览）。\n\n工作方式：\n1. 按主理下发的法律名与关键词检索，命中后原样回传；\n2. 每次检索都必须真实调用工具，不得凭记忆作答；\n3. 查不到就如实说「未命中」，并给出建议的替代检索词。\n\n硬规则：\n1. **绝不臆造条文号与内容**——这是本团队存在的理由；\n2. 回传必须保留 title…(+98)",
+        "status": "unstarted",
+        "execution_status": "idle",
+        "mode": "build_mode"
+      },
+      "result": "<MemberOpResult>",
+      "error": null
+    },
+    {
+      "seq": 3,
+      "t_ms": 1997,
+      "event": "spawn_member",
+      "kind": "member",
+      "args": [
+        {
+          "_type": "TeamBackend",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "is_leader": true,
+          "leader_member_name": "team_leader",
+          "_workspace_manager": null,
+          "_leader_name_cache": null,
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "member_name": "kg_curator",
+        "display_name": "图谱策展",
+        "agent_card": {
+          "id": "…",
+          "name": "…",
+          "description": "…",
+          "input_params": "…",
+          "output_params": "…",
+          "interface_url": "…"
+        },
+        "desc": "把任务材料归到案由，并从知识图谱取出要件与请求权基础骨架。",
+        "prompt": "你是法元 · Faron Agent Group 的图谱策展成员。\n\n工具：kg_find_case（材料 → 案由）、kg_query（案由 → 骨架）、\n      kg_add_candidate（登记候选边，待人工确认）。\n\n工作方式：\n1. 用 kg_find_case 把任务材料归到案由；无法判断时如实回报「未命中」，\n   并说明计划卡应回退为通用流水线；\n2. 用 kg_query 取骨架，回报构成要件、请求权基础、证据、争点、文书载体；\n3. 任务中真实命中的、不在图谱已有请求权基础里的法条，用 kg_add_candidate\n   登记为候选边（低置信度，**待人工确认*…(+112)",
+        "status": "unstarted",
+        "execution_status": "idle",
+        "mode": "build_mode"
+      },
+      "result": "<MemberOpResult>",
+      "error": null
+    },
+    {
+      "seq": 4,
+      "t_ms": 2012,
+      "event": "spawn_member",
+      "kind": "member",
+      "args": [
+        {
+          "_type": "TeamBackend",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "is_leader": true,
+          "leader_member_name": "team_leader",
+          "_workspace_manager": null,
+          "_leader_name_cache": null,
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "member_name": "drafter",
+        "display_name": "起草员",
+        "agent_card": {
+          "id": "…",
+          "name": "…",
+          "description": "…",
+          "input_params": "…",
+          "output_params": "…",
+          "interface_url": "…"
+        },
+        "desc": "依据检索结果与模板起草文书正文。",
+        "prompt": "你是资深法律文书起草人：结合检索结果起草高质量文书/意见，引用处标注法条篇名与条文号。\n\n你是法元 · Faron Agent Group 的起草员成员。\n\n工具：template_load（取模板段落结构）、returned_refs_summary（确认可引用范围）。\n\n工作方式：\n1. 先调 template_load 拿到任务类型对应的段落结构；\n2. 调 returned_refs_summary 核对本次可引用的法条集合；\n3. 按 KIND_GUIDES 的骨架起草正文。\n\n硬规则：\n1. **只允许引用 returned_refs_summary 里的法条**，绝不允许写集合外…(+116)",
+        "status": "unstarted",
+        "execution_status": "idle",
+        "mode": "build_mode"
+      },
+      "result": "<MemberOpResult>",
+      "error": null
+    },
+    {
+      "seq": 5,
+      "t_ms": 2029,
+      "event": "spawn_member",
+      "kind": "member",
+      "args": [
+        {
+          "_type": "TeamBackend",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "is_leader": true,
+          "leader_member_name": "team_leader",
+          "_workspace_manager": null,
+          "_leader_name_cache": null,
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "member_name": "citation_auditor",
+        "display_name": "质检员·两段自检",
+        "agent_card": {
+          "id": "…",
+          "name": "…",
+          "description": "…",
+          "input_params": "…",
+          "output_params": "…",
+          "interface_url": "…"
+        },
+        "desc": "两段自检：引用是否真实存在 + 是否落在案由请求权基础范围内。",
+        "prompt": "你是文书质检员：核对引用是否真实存在、风险/三性是否覆盖、口径是否一致、有无明显遗漏；有则指出并给修改说明。\n\n你是法元 · Faron Agent Group 的质检员成员，负责**两段确定性自检**。\n\n工具：audit_citations（第一段）、audit_applicability（第二段）、returned_refs_summary。\n\n工作方式：\n1. 把起草员产出的正文**原文**传给 audit_citations → 得到未覆盖引用清单；\n2. 用主理给出的案由调 audit_applicability → 得到「是否落在请求权基础范围内」；\n3. 把两份报告的 `rep…(+181)",
+        "status": "unstarted",
+        "execution_status": "idle",
+        "mode": "build_mode"
+      },
+      "result": "<MemberOpResult>",
+      "error": null
+    },
+    {
+      "seq": 6,
+      "t_ms": 2046,
+      "event": "spawn_member",
+      "kind": "member",
+      "args": [
+        {
+          "_type": "TeamBackend",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "is_leader": true,
+          "leader_member_name": "team_leader",
+          "_workspace_manager": null,
+          "_leader_name_cache": null,
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "member_name": "human_reviewer",
+        "display_name": "人类复核员",
+        "agent_card": {
+          "id": "…",
+          "name": "…",
+          "description": "…",
+          "input_params": "…",
+          "output_params": "…",
+          "interface_url": "…"
+        },
+        "desc": "真实人类复核员：审批计划卡（need_confirm）、复核两段自检结论。",
+        "prompt": "",
+        "status": "unstarted",
+        "execution_status": "idle",
+        "mode": "build_mode"
+      },
+      "result": "<MemberOpResult>",
+      "error": null
+    },
+    {
+      "seq": 7,
+      "t_ms": 8215,
+      "event": "broadcast_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "提醒（1）：看板上有 task-1（检索溯源）与 task-2（起草意见书）。被指派的成员请 view_task 后 claim_task 开工，完成后 member_complete_task 交付。",
+        "from_member_name": "user"
+      },
+      "result": null,
+      "error": null
+    },
+    {
+      "seq": 8,
+      "t_ms": 15742,
+      "event": "broadcast_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "提醒（2）：看板上有 task-1（检索溯源）与 task-2（起草意见书）。被指派的成员请 view_task 后 claim_task 开工，完成后 member_complete_task 交付。",
+        "from_member_name": "user"
+      },
+      "result": null,
+      "error": null
+    },
+    {
+      "seq": 9,
+      "t_ms": 16366,
+      "event": "create_task",
+      "kind": "task_board",
+      "args": [
+        {
+          "_type": "TeamTaskManager",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          },
+          "plans_dir": "<WindowsPath>",
+          "team_plan_id": "faron_wenshu_team",
+          "leader_member_name": "team_leader",
+          "_dispatch_mode": "autonomous"
+        },
+        [
+          "<TaskGraphSpec>",
+          "<TaskGraphSpec>"
+        ]
+      ],
+      "kwargs": {},
+      "result": "<TaskGraphResult>",
+      "error": null
+    },
+    {
+      "seq": 10,
+      "t_ms": 17531,
+      "event": "spawn_member",
+      "kind": "member",
+      "args": [
+        {
+          "_type": "TeamBackend",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "is_leader": true,
+          "leader_member_name": "team_leader",
+          "_workspace_manager": null,
+          "_leader_name_cache": null,
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "member_name": "law-retriever-r9",
+        "display_name": "检索员·民商",
+        "agent_card": {
+          "id": "…",
+          "name": "…",
+          "description": "…",
+          "input_params": "…",
+          "output_params": "…",
+          "interface_url": "…"
+        },
+        "desc": "在内置日美法库中检索真实法条并回传溯源信息。",
+        "prompt": null,
+        "mode": "build_mode",
+        "allocation": "<Allocation>",
+        "isolation": null
+      },
+      "result": "<MemberOpResult>",
+      "error": null
+    },
+    {
+      "seq": 11,
+      "t_ms": 17645,
+      "event": "update_task",
+      "kind": "task_board",
+      "args": [
+        {
+          "_type": "TeamTaskManager",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          },
+          "plans_dir": "<WindowsPath>",
+          "team_plan_id": "faron_wenshu_team",
+          "leader_member_name": "team_leader",
+          "_dispatch_mode": "autonomous"
+        },
+        "task-1"
+      ],
+      "kwargs": {
+        "title": "检索中日合资合同相关法条并溯源（指派检索员）",
+        "content": null
+      },
+      "result": "<TaskOpResult>",
+      "error": null
+    },
+    {
+      "seq": 12,
+      "t_ms": 17680,
+      "event": "assign_task",
+      "kind": "task_board",
+      "args": [
+        {
+          "_type": "TeamTaskManager",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          },
+          "plans_dir": "<WindowsPath>",
+          "team_plan_id": "faron_wenshu_team",
+          "leader_member_name": "team_leader",
+          "_dispatch_mode": "autonomous"
+        },
+        "task-1",
+        "law-retriever-r9"
+      ],
+      "kwargs": {},
+      "result": "<TaskOpResult>",
+      "error": null
+    },
+    {
+      "seq": 13,
+      "t_ms": 17896,
+      "event": "broadcast_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "两张单已建好：task-1 检索溯源、task-2 起草意见书（依赖 task-1）。请检索员先认领 task-1。"
+      },
+      "result": "5ee2762f-c37c-40fe-9139-bbddee502886",
+      "error": null
+    },
+    {
+      "seq": 14,
+      "t_ms": 18054,
+      "event": "send_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "检索员请开工：task-1（检索中日合资合同相关法条并溯源）已指派给你，用 view_task 看详情，claim_task 认领，做完 member_complete_task 交付。",
+        "to_member_name": "law-retriever-r9"
+      },
+      "result": "8c472e09-86a3-42e8-9d3a-84d1ea25200f",
+      "error": null
+    },
+    {
+      "seq": 15,
+      "t_ms": 18139,
+      "event": "send_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "起草员请待命：task-2（起草《合同审查意见书》）依赖 task-1，task-1 交付后你会收到通知，届时 view_task → claim_task → 交付。",
+        "to_member_name": "drafter"
+      },
+      "result": "56ab7e47-7208-460f-abfb-bd1c9def22fb",
+      "error": null
+    },
+    {
+      "seq": 16,
+      "t_ms": 23276,
+      "event": "broadcast_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "提醒（3）：看板上有 task-1（检索溯源）与 task-2（起草意见书）。被指派的成员请 view_task 后 claim_task 开工，完成后 member_complete_task 交付。",
+        "from_member_name": "user"
+      },
+      "result": null,
+      "error": null
+    },
+    {
+      "seq": 17,
+      "t_ms": 30803,
+      "event": "broadcast_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "提醒（4）：看板上有 task-1（检索溯源）与 task-2（起草意见书）。被指派的成员请 view_task 后 claim_task 开工，完成后 member_complete_task 交付。",
+        "from_member_name": "user"
+      },
+      "result": null,
+      "error": null
+    },
+    {
+      "seq": 18,
+      "t_ms": 38285,
+      "event": "broadcast_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "提醒（5）：看板上有 task-1（检索溯源）与 task-2（起草意见书）。被指派的成员请 view_task 后 claim_task 开工，完成后 member_complete_task 交付。",
+        "from_member_name": "user"
+      },
+      "result": null,
+      "error": null
+    },
+    {
+      "seq": 19,
+      "t_ms": 45801,
+      "event": "broadcast_message",
+      "kind": "message",
+      "args": [
+        {
+          "_type": "TeamMessageManager",
+          "team_name": "faron_wenshu_team",
+          "member_name": "team_leader",
+          "db": {
+            "_type": "TeamDatabase",
+            "config": "…",
+            "engine": "…",
+            "session_local": "…",
+            "read_engine": "…",
+            "read_session_local": "…",
+            "_sessions": "…",
+            "_initialized": "…",
+            "_init_lock": "…"
+          },
+          "messager": {
+            "_type": "InProcessMessager",
+            "_config": "…",
+            "_bus": "…",
+            "_subscribed_topics": "…"
+          }
+        }
+      ],
+      "kwargs": {
+        "content": "提醒（6）：看板上有 task-1（检索溯源）与 task-2（起草意见书）。被指派的成员请 view_task 后 claim_task 开工，完成后 member_complete_task 交付。",
+        "from_member_name": "user"
+      },
+      "result": null,
+      "error": null
+    }
+  ],
+  "stream_chunks": 106,
+  "stream_tail": [
+    "type='context.usage' index=34 payload={'event_type': 'context.usage', 'schema_version': 'context-usage.v1', 'phase': 'post_call', 'request_id': 'fa7f93cc43a3462f9e31edf127a9448b', 'session_id': 'faron-stub-session', 'product_session_id': 'faron-stub-session', 'execution_session_id': 'faron-stub-session', 'context_owner_id': 'faron_wenshu_team|team_leader|faron-stub-session|default_context_id', 'agent_id': 'faron_team_leader', 'team_id': 'faron_wenshu_team', 'member_name': 'team_leader', 'invocation_id': 'c7a3e2c0931f4815bb421404b0a42585', 'parent_invocation_id': None, 'delegation_id': None, 'agent_path': ['faron_team_leader'], 'depth': 0, 'cache_identity': 'team:faron-stub-session:team:faron_wenshu_team:member:faron_team_leader', 'parent_cache_identity': 'faron-stub-session', 'cache_mode': 'provider', 'cache_scope': 'session', 'sequence': 34, 'provider': 'OpenAI', 'model': 'faron-stub-strong', 'deployment': None, 'timestamp': '2026-10-19T05:07:06.647197+00:00', 'context_snapshot_id': '2a475751ffbf43fdb7deba699d64ba08', 'context_changes': {'message_event': 'append', 'system_prompt_changed': False, 'skills_changed': False, 'attachments_changed': False, 'tools_changed': False, 'stable_prefix_changed': False}, 'measurement_cache': {'hit': 'partial', 'reused_parts': ['skills', 'system_prompt', 'tools'], 'recomputed_parts': ['messages'], 'message_revision': 71, 'measurement_version': '1'}, 'context_window': {'limit_tokens': 200000, 'input_tokens': 20573, 'occupancy_rate': 0.102865, 'tokens_source': 'string_length_fallback', 'local_estimated_input_tokens': 20573, 'reconciliation_delta_tokens': None, 'context_snapshot_id': '2a475751ffbf43fdb7deba699d64ba08'}, 'parts': {'system_prompt': {'category': 'system_prompt', 'tokens': 913, 'percentage_of_window': 0.004565, 'percentage_of_input': 0.04437855441598211, 'estimated': True, 'tokenizer': 'unicode_codepoints', 'carrier': 'system_message', 'source': 'string_length_fallback', 'measurement_source': 'string_length_fallback', 'fallback_reason': 'model_tokenizer_spec_missing', 'fallback_tokenizer_model': None, 'order': None, 'stable_id': None}, 'skills': {'category': 'skills', 'tokens': 18, 'percentage_of_window': 9e-05, 'percentage_of_input': 0.0008749331648276868, 'estimated': True, 'tokenizer': 'unicode_codepoints', 'carrier': 'system_message', 'source': 'string_length_fallback', 'measurement_source': 'string_length_fallback', 'fallback_reason': 'model_tokenizer_spec_missing', 'fallback_tokenizer_model': None, 'order': None, 'stable_id': None}, 'tools': {'category': 'tools', 'tokens': 11636, 'percentage_of_window': 0.05818, 'percentage_of_input': 0.5655956836630536, 'estimated': True, 'tokenizer': 'unicode_codepoints', 'carrier': 'tools', 'source': 'string_length_fallback', 'measurement_source': 'string_length_fallback', 'fallback_reason': 'model_tokenizer_spec_missing', 'fallback_tokenizer_model': None, 'order': None, 'stable_id': None}, 'messages': {'category': 'messages', 'tokens': 8006, 'percentage_of_window': 0.04003, 'percentage_of_input': 0.38915082875613666, 'estimated': True, 'tokenizer': 'unicode_codepoints', 'carrier': 'context_message', 'source': 'string_length_fallback', 'measurement_source': 'string_length_fallback', 'fallback_reason': 'model_tokenizer_spec_missing', 'fallback_tokenizer_model': None, 'order': None, 'stable_id': None}}, 'kv_cache': {'request': {'input_tokens': None, 'cache_read_tokens': None, 'cache_miss_tokens': None, 'cache_write_tokens': None, 'hit_rate': None, 'status': 'not_reported', 'source': 'not_reported', 'authoritative': False, 'miss_tokens_derived': False, 'cache_mode': None, 'cache_scope': None, 'invalid_reason': None}, 'session': {'scope': 'session', 'aggregation_method': 'token_weighted', 'aggregation_key': {'session_id': 'faron-stub-session', 'provider': 'OpenAI', 'model': 'faron-stub-strong', 'deployment': '', 'cache_mode': 'provider', 'cache_scope': 'session', 'product_session_id': 'faron-stub-session', 'execution_session_id': 'faron-stub-session', 'cache_identity': 'team:faron-stub-session:team:faron_wenshu_team:member:faron_team_leader', 'parent_cache_identity': 'faron-stub-session', 'team_id': 'faron_wenshu_team', 'agent_id': 'faron_team_leader', 'member_name': 'team_leader'}, 'calls_total': 35, 'calls_observed': 0, 'calls_partial': 0, 'calls_not_reported': 35, 'input_tokens_total': 0, 'cache_read_tokens_total': 0, 'cache_miss_tokens_total': 0, 'cache_write_tokens_total': None, 'cache_write_coverage': 'none', 'average_input_per_call': None, 'weighted_hit_rate': None, 'average_cache_read_per_call': None, 'average_cache_miss_per_call': None, 'status': 'not_reported', 'data_quality': 'not_reported'}, 'measurement_cache': {'hit': 'partial', 'reused_parts': ['skills', 'system_prompt', 'tools'], 'recomputed_parts': ['messages'], 'message_revision': 71, 'measurement_version': '1'}, 'context_changes': {'message_event': 'append', 'system_prompt_changed': False, 'skills_changed': False, 'attachments_changed': False, 'tools_changed': False, 'stable_prefix_changed': False}, 'management': {}, 'diagnostics': {'status': 'not_collected'}}, 'session_kv_cache_hit_rate': None, 'measurement': {'category_source': 'string_length_fallback', 'total_source': 'string_length_fallback', 'tokenizer': 'unicode_codepoints', 'estimated': True, 'authoritative_total': False, 'measurement_version': '1', 'context_snapshot_id': '2a475751ffbf43fdb7deba699d64ba08'}, 'source_agent_id': 'faron_team_leader', 'source_team_id': 'faron_wenshu_team', 'source_member_name': 'team_leader'} source_member='team_leader' role=<TeamRole.LEADER: 'leader'>",
+    "type='controller_output' index=0 payload={'value': ControllerOutputPayload(type=<EventType.TASK_COMPLETION: 'task_completion'>, data=[JsonDataFrame(type='json', data={'output': '已交付《合同审查意见书》要点：\\n① 日方出资延迟构成违约（出资义务属主给付义务，不因迟延而消灭）；\\n② 我方有权要求继续履行并主张迟延损害赔偿；\\n③ 准据法与管辖依合同约定，未约定的按最密切联系原则确定；\\n④ 风险与修改建议见随文清单。\\n引用条文均取自本地法库检索结果，已过两段确定性自检。', 'result_type': 'answer'})], metadata={'task_id': '31116094b88a4b2490663659d0255e79'}), 'source_agent_id': 'faron_team_leader', 'source_team_id': 'faron_wenshu_team', 'source_member_name': 'team_leader'} source_member='team_leader' role=<TeamRole.LEADER: 'leader'>",
+    "type='answer' index=0 payload={'output': '已交付《合同审查意见书》要点：\\n① 日方出资延迟构成违约（出资义务属主给付义务，不因迟延而消灭）；\\n② 我方有权要求继续履行并主张迟延损害赔偿；\\n③ 准据法与管辖依合同约定，未约定的按最密切联系原则确定；\\n④ 风险与修改建议见随文清单。\\n引用条文均取自本地法库检索结果，已过两段确定性自检。', 'result_type': 'answer', 'source_agent_id': 'faron_team_leader', 'source_team_id': 'faron_wenshu_team', 'source_member_name': 'team_leader'} source_member='team_leader' role=<TeamRole.LEADER: 'leader'>"
+  ],
+  "exit": 3
+}

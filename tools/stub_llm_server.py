@@ -106,6 +106,46 @@ def _already_called(messages: list[dict[str, Any]]) -> set[str]:
     return used
 
 
+def _call_counts(messages: list[dict[str, Any]]) -> dict[str, int]:
+    """本对话里每个工具**被调用了几次**（不是"有没有调用过"）。
+
+    用它做剧本推进游标。相比「assistant 回合数」的好处：
+      - 框架偶尔多插一条 assistant 消息（如 `spawn_teammate` 之后）时不会错位；
+      - 同一工具在剧本里出现多次（`view_task` / `send_message`）也能正确区分。
+    """
+    counts: dict[str, int] = {}
+    for m in messages:
+        if (m or {}).get("role") != "assistant":
+            continue
+        for tc in (m or {}).get("tool_calls") or []:
+            fn = (tc or {}).get("function") or {}
+            n = fn.get("name")
+            if isinstance(n, str):
+                counts[n] = counts.get(n, 0) + 1
+    return counts
+
+
+def _next_step(
+    seq: list[tuple[str, dict[str, Any], float]],
+    called: dict[str, int],
+) -> tuple[int | None, float]:
+    """在剧本里找出「下一步该做哪一条」。
+
+    做法：顺序遍历剧本，累计每个工具名在剧本前缀里出现的次数；
+    第一个「实际调用次数 < 剧本需要次数」的位置就是下一步。
+    这样既能跳过已完成的，也能正确处理同名工具重复出现。
+
+    Returns:
+        (索引, 0.0)；剧本全部完成时返回 (None, 0.0)。
+    """
+    need: dict[str, int] = {}
+    for i, (name, _args, _delay) in enumerate(seq):
+        need[name] = need.get(name, 0) + 1
+        if called.get(name, 0) < need[name]:
+            return i, 0.0
+    return None, 0.0
+
+
 # ---------------------------------------------------------------------------
 # 剧本
 # ---------------------------------------------------------------------------
@@ -129,6 +169,26 @@ M_DRAFTER = "drafter"
 M_REVIEWER = "human_reviewer"
 M_AUDITOR = "citation_auditor"
 
+#: 运行层实测里**动态召唤**的检索员（R9 · P0-2）
+#:
+#: 为什么另起一个，而不是直接用预定义的 `law_retriever`：
+#:   `build_team` 会把 `predefined_members` 全部建行并**立即 autostart**，
+#:   那一刻看板还是空的 —— 成员首轮 poll 什么都看不到，随即
+#:   `finalize_member: pausing`，之后再也叫不醒（R8 坑 5）。
+#:
+#:   而 `spawn_teammate` **只写库不启动**（`spawn_member` 的 docstring 明说：
+#:   "Only persists the member data — does NOT start the member"），
+#:   启动发生在 `create_task` 内部的 `_auto_start_members()`，
+#:   且源码顺序是**先 add_graph 建单、再 _auto_start_members 启动**。
+#:   ⇒ 只要「先 spawn、再 create_task」，成员的首轮 poll 就一定能看到任务。
+#:
+#:   实测源码位置：`agent_teams/tools/tool_task.py` TaskCreateTool.invoke
+#:
+#: ⚠️ 名字只能用 `[a-z][a-z0-9-]*`（**下划线非法**，实测被
+#:    `_validate_member_name` 拒掉）。踩过：`law_retriever_r9` 直接被判无效，
+#:    连带 `create_task` 的 assignee 校验也失败 —— 两个工具都"执行了但没落地"。
+M_RETRIEVER_NEW = "law-retriever-r9"
+
 
 #: 建单前先等成员把订阅挂上
 #:
@@ -149,11 +209,14 @@ LEADER_POLL_SECONDS = 6.0
 LEADER_MAX_POLLS = 24
 
 
-def _leader_script(turn: int) -> tuple[dict[str, Any] | None, float]:
-    """主理的行动序列（按 assistant 回合严格推进）。
+def _leader_script(called: dict[str, int]) -> tuple[dict[str, Any] | None, float]:
+    """主理的行动序列（按"每个工具已调用几次"推进）。
 
     顺序依据框架规定：**`build_team` 之前不能调用任何其他团队工具**，
     且「创建任务前必须先 `view_task` 查看看板」。
+
+    `called` 是「本对话里每个工具已调用几次」（见 `_call_counts`）。
+    用调用次数而不是 assistant 回合数推进，理由见下方 `_next_step` 那段说明。
 
     返回 `(action, delay_seconds)`；`action` 为 None 表示本回合给最终文字答复。
     """
@@ -174,6 +237,16 @@ def _leader_script(turn: int) -> tuple[dict[str, Any] | None, float]:
         #    成员永远收不到唤醒事件（InProcessMessager 不补发历史）。
         ("view_task", {"action": "list"}, BUILD_TEAM_SETTLE_SECONDS),
         ("view_task", {"action": "list"}, 0.0),
+        # ── R9 · P0-2 关键时序：**先建单、后召唤** ──
+        #    实测（12:45:51 那次）：`spawn_teammate` **本身**就会经由
+        #    `on_teammate_created` → `spawning teammate` **立即启动**成员，
+        #    并不等 `create_task` 的 `_auto_start_members()`。
+        #    所以「先 spawn 后建单」会让成员早 55ms 醒来，仍然看不到任务。
+        #
+        #    反过来「先建单（**不指派**）后召唤」才对：成员首轮
+        #    `on_initial_task_poll` 会看到一条 `status=pending` 且无 assignee 的任务，
+        #    正是自主认领模式里「可被自主认领」的那种，于是 view_task → claim_task。
+        #    指派放在后面用 `update_task` 补（这次实测 assignee 能正确落库）。
         (
             "create_task",
             {
@@ -181,7 +254,6 @@ def _leader_script(turn: int) -> tuple[dict[str, Any] | None, float]:
                     {
                         "task_id": "task-1",
                         "title": "检索中日合资合同相关法条并溯源",
-                        "assignee": M_RETRIEVER,
                         "content": (
                             "目标：锁定「股东出资义务 / 迟延履行 / 继续履行请求权」三条主线"
                             "在本地的可引用条文。\n"
@@ -206,13 +278,22 @@ def _leader_script(turn: int) -> tuple[dict[str, Any] | None, float]:
             0.0,
         ),
         ("view_task", {"action": "list"}, 0.0),
-        # ⚠️ 定向指派：自主模式下 `create_task.assignee` 实测被丢掉（库里 assignee=None），
-        #    必须用 `update_task` 显式指派 —— 这条路会发 TASK_CLAIMED 定向事件，
-        #    由 spawn/runtime 管理器把**已暂停**的成员重新拉起一轮。
-        #    （成员在 build_team 后会 finalize_member → pause，广播唤不醒它。）
+        # ── 建单完成后再召唤成员：它的首轮 poll 就能看到任务 ──
+        (
+            "spawn_teammate",
+            {
+                "member_name": M_RETRIEVER_NEW,
+                "display_name": "检索员·民商",
+                "desc": "在内置日美法库中检索真实法条并回传溯源信息。",
+                "model_name": "faron-stub-fast",
+            },
+            0.0,
+        ),
+        # ⚠️ 定向指派：`create_task.assignee` 实测会丢（库里 assignee=None），
+        #    补一次 `update_task` 显式指派；这次实测 assignee 能正确落库。
         (
             "update_task",
-            {"task_id": "task-1", "assignee": M_RETRIEVER,
+            {"task_id": "task-1", "assignee": M_RETRIEVER_NEW,
              "title": "检索中日合资合同相关法条并溯源（指派检索员）"},
             0.0,
         ),
@@ -235,7 +316,7 @@ def _leader_script(turn: int) -> tuple[dict[str, Any] | None, float]:
         (
             "send_message",
             {
-                "to": M_RETRIEVER,
+                "to": M_RETRIEVER_NEW,
                 "content": (
                     "检索员请开工：task-1（检索中日合资合同相关法条并溯源）已指派给你，"
                     "用 view_task 看详情，claim_task 认领，做完 member_complete_task 交付。"
@@ -255,45 +336,27 @@ def _leader_script(turn: int) -> tuple[dict[str, Any] | None, float]:
             0.0,
         ),
     ]
-    if turn < len(seq):
-        name, args, delay = seq[turn]
+
+    # 推进游标：按「某个工具已经被调用过几次」判断，而不是按 assistant 回合数。
+    #
+    # ⚠️ 为什么不能用回合数（R9 实测踩到的真 bug）：
+    #    `spawn_teammate` 之后框架会**多插一条 assistant 消息**，
+    #    于是回合数一步跳 2，游标直接越过 `create_task` ——
+    #    现象是「剧本里明明有 create_task，日志里却没执行」，
+    #    而且看起来像"create_task 回归失败了"，极难归因。
+    #    按调用次数比对则天然免疫：多插几条 assistant 都不影响。
+    idx, default_delay = _next_step(seq, called)
+    if idx is not None:
+        name, args, delay = seq[idx]
         return ({"name": name, "arguments": json.dumps(args, ensure_ascii=False)}, delay)
 
-    # 之后的回合：盯看板（带延时，给成员留出作业窗口）
-    polls = turn - len(seq)
+    # 剧本走完了：盯看板（带延时，给成员留出作业窗口）
+    scripted_views = sum(1 for n, _, _ in seq if n == "view_task")
+    polls = called.get("view_task", 0) - scripted_views
     if polls < LEADER_MAX_POLLS:
         return ({"name": "view_task", "arguments": json.dumps({"action": "list"})},
                 LEADER_POLL_SECONDS)
     return (None, 0.0)
-
-def _member_script(turn: int) -> dict[str, Any] | None:
-    """成员的行动序列：查可领 → 领活 → 交付 → 汇报。"""
-    seq: list[tuple[str, dict[str, Any]]] = [
-        ("view_task", {"action": "claimable"}),
-        # ⚠️ claim_task 必须同时给 task_id 与 status（实测框架 schema 要求）
-        ("claim_task", {"task_id": "task-1", "status": "claimed"}),
-        (
-            "member_complete_task",
-            {
-                "task_id": "task-1",
-                "note": (
-                    "检索完成：本地法库命中《中外合资经营企业法》出资义务相关条款与"
-                    "《民法典》合同编迟延履行规则；条号与出处已登记，供起草员 task-2 引用。"
-                ),
-            },
-        ),
-        (
-            "send_message",
-            {
-                "to": "*",
-                "content": "task-1 已交付：条文命中与出处已登记，task-2 可以开工。",
-            },
-        ),
-    ]
-    if turn < len(seq):
-        name, args = seq[turn]
-        return {"name": name, "arguments": json.dumps(args, ensure_ascii=False)}
-    return None
 
 
 LEADER_FINAL = (
@@ -309,26 +372,31 @@ MEMBER_FINAL = "本单已完成，结果已交回主理。"
 REVIEWER_FINAL = "已复核：两段自检结论一致，引用与出处核对无误，通过。"
 
 
-def _reviewer_script(turn: int) -> tuple[dict[str, Any] | None, float]:
-    """人类复核员（HITL 闸门）的行动序列：看复审队列 → 通过。"""
-    seq: list[tuple[str, dict[str, Any]]] = [
-        ("view_task", {"action": "in_review"}),
+def _reviewer_script(called: dict[str, int]) -> tuple[dict[str, Any] | None, float]:
+    """人类复核员（HITL 闸门）的行动序列：看复审队列 → 通过。
+
+    `called` 是「本对话里每个工具已调用几次」，见 `_call_counts` / `_next_step`
+    —— 用次数推进而不是回合数，理由见 `_leader_script` 里的说明。
+    """
+    seq: list[tuple[str, dict[str, Any], float]] = [
+        ("view_task", {"action": "in_review"}, 0.0),
         ("verify_task", {"task_id": "task-1", "decision": "approve",
-                         "feedback": "两段自检结论一致，引用与出处核对无误，通过。"}),
-        ("send_message", {"to": "*", "content": "task-1 已复核通过。"}),
+                         "feedback": "两段自检结论一致，引用与出处核对无误，通过。"}, 0.0),
+        ("send_message", {"to": "*", "content": "task-1 已复核通过。"}, 0.0),
     ]
-    if turn < len(seq):
-        name, args = seq[turn]
-        return ({"name": name, "arguments": json.dumps(args, ensure_ascii=False)}, 0.0)
+    idx, _ = _next_step(seq, called)
+    if idx is not None:
+        name, args, delay = seq[idx]
+        return ({"name": name, "arguments": json.dumps(args, ensure_ascii=False)}, delay)
     return (None, 0.0)
 
 
-def _member_script(turn: int) -> tuple[dict[str, Any] | None, float]:
+def _member_script(called: dict[str, int]) -> tuple[dict[str, Any] | None, float]:
     """成员的行动序列：查可领 → 领活 → 交付 → 汇报。"""
-    seq: list[tuple[str, dict[str, Any]]] = [
-        ("view_task", {"action": "claimable"}),
+    seq: list[tuple[str, dict[str, Any], float]] = [
+        ("view_task", {"action": "claimable"}, 0.0),
         # ⚠️ claim_task 必须同时给 task_id 与 status（实测框架 schema 要求）
-        ("claim_task", {"task_id": "task-1", "status": "claimed"}),
+        ("claim_task", {"task_id": "task-1", "status": "claimed"}, 0.0),
         (
             "member_complete_task",
             {
@@ -338,6 +406,7 @@ def _member_script(turn: int) -> tuple[dict[str, Any] | None, float]:
                     "《民法典》合同编迟延履行规则；条号与出处已登记，供起草员 task-2 引用。"
                 ),
             },
+            0.0,
         ),
         (
             "send_message",
@@ -345,11 +414,13 @@ def _member_script(turn: int) -> tuple[dict[str, Any] | None, float]:
                 "to": "*",
                 "content": "task-1 已交付：条文命中与出处已登记，task-2 可以开工。",
             },
+            0.0,
         ),
     ]
-    if turn < len(seq):
-        name, args = seq[turn]
-        return ({"name": name, "arguments": json.dumps(args, ensure_ascii=False)}, 0.0)
+    idx, _ = _next_step(seq, called)
+    if idx is not None:
+        name, args, delay = seq[idx]
+        return ({"name": name, "arguments": json.dumps(args, ensure_ascii=False)}, delay)
     return (None, 0.0)
 
 
@@ -357,17 +428,17 @@ def _pick_action(body: dict[str, Any]) -> tuple[dict[str, Any] | None, float]:
     """根据「请求里有哪些工具」判定角色，再按其剧本给出下一步动作。"""
     tools = _tool_names(body)
     messages = body.get("messages") or []
-    turn = _assistant_turns(messages)
+    called = _call_counts(messages)
 
     # 角色判定顺序有讲究：
     #   主理 = 能建队/建单；复核员 = 有 verify_task 但**没有** create_task；
     #   成员 = 能领活/交付。
     if "build_team" in tools or "create_task" in tools:
-        return _leader_script(turn)
+        return _leader_script(called)
     if "verify_task" in tools:
-        return _reviewer_script(turn)
+        return _reviewer_script(called)
     if "claim_task" in tools or "member_complete_task" in tools:
-        return _member_script(turn)
+        return _member_script(called)
     return (None, 0.0)
 
 
@@ -573,14 +644,39 @@ def main() -> int:
     return 0
 
 
+def _walk_script(body: dict[str, Any], limit: int = 40) -> list[str]:
+    """把一个剧本从头到尾空走一遍，返回依次会调用的工具名列表。
+
+    这是自检的核心手法：不猜「第 N 步应该是什么」，而是**真的模拟框架的推进方式**
+    —— 每次拿到一个动作，就把它当作 assistant.tool_calls 追加进历史，再问下一步。
+    这样能一次性发现剧本里的死循环、跳步、以及 `_next_step` 的推进错误。
+    """
+    cur = json.loads(json.dumps(body))
+    out: list[str] = []
+    for i in range(limit):
+        action, _delay = _pick_action(cur)
+        if action is None:
+            out.append("(text)")
+            break
+        name = action["name"]
+        out.append(name)
+        cur["messages"].append({
+            "role": "assistant", "content": None,
+            "tool_calls": [{"id": f"w{i}", "type": "function",
+                            "function": {"name": name, "arguments": action["arguments"]}}],
+        })
+    return out
+
+
 def _selftest() -> int:
-    """不依赖网络的自检：验证「同输入同输出」与角色判定。"""
+    """不依赖网络的自检：验证确定性、角色判定、剧本推进。"""
     leader_body = {
         "model": "m",
         "messages": [{"role": "system", "content": "你是主理"},
                      {"role": "user", "content": LANDING_Q}],
         "tools": [{"type": "function", "function": {"name": "build_team"}},
                   {"type": "function", "function": {"name": "create_task"}},
+                  {"type": "function", "function": {"name": "spawn_teammate"}},
                   {"type": "function", "function": {"name": "send_message"}}],
     }
     member_body = {
@@ -589,37 +685,80 @@ def _selftest() -> int:
         "tools": [{"type": "function", "function": {"name": "claim_task"}},
                   {"type": "function", "function": {"name": "member_complete_task"}}],
     }
+    reviewer_body = {
+        "model": "m",
+        "messages": [{"role": "user", "content": "复核"}],
+        "tools": [{"type": "function", "function": {"name": "view_task"}},
+                  {"type": "function", "function": {"name": "verify_task"}}],
+    }
 
     a1, _ = _pick_action(leader_body)
     a2, _ = _pick_action(json.loads(json.dumps(leader_body)))
     ok_rows: list[tuple[bool, str]] = []
     ok_rows.append((a1 == a2, "同输入同输出（确定性）"))
     ok_rows.append((a1 is not None and a1["name"] == "build_team", "主理第一步 = build_team"))
+
     m1, _ = _pick_action(member_body)
     ok_rows.append((m1 is not None and m1["name"] == "view_task", "成员第一步 = view_task"))
 
-    # 推进一步后应换下一个动作
-    advanced = json.loads(json.dumps(leader_body))
-    advanced["messages"].append({
-        "role": "assistant", "content": None,
-        "tool_calls": [{"id": "x", "type": "function",
-                        "function": {"name": "build_team", "arguments": "{}"}}],
-    })
-    a3, _ = _pick_action(advanced)
-    ok_rows.append((a3 is not None and a3["name"] == "view_task",
-                    f"推进一步后换动作（得到 {a3 and a3['name']}）"))
+    # 主理剧本必须包含全部关键动作，且 spawn_teammate 必须在 create_task 之前
+    # （这是 R9 P0-2 的时序要求：先召唤、后建单，成员首轮才能看到任务）
+    lead_seq = _walk_script(leader_body)
+    for need in ("build_team", "spawn_teammate", "create_task", "send_message", "view_task"):
+        ok_rows.append((need in lead_seq, f"主理剧本含 {need}"))
+    ok_rows.append((
+        "create_task" in lead_seq and "spawn_teammate" in lead_seq
+        and lead_seq.index("create_task") < lead_seq.index("spawn_teammate"),
+        f"create_task 在 spawn_teammate 之前（{lead_seq[:7]}…）",
+    ))
+    ok_rows.append((lead_seq.count("create_task") == 1,
+                    f"create_task 只出现一次（实际 {lead_seq.count('create_task')} 次）"))
+
+    # 成员剧本必须真的领活并交付（R9 P0-2 的验收目标）
+    mem_seq = _walk_script(member_body)
+    ok_rows.append(("claim_task" in mem_seq, f"成员剧本含 claim_task（{mem_seq}）"))
+    ok_rows.append(("member_complete_task" in mem_seq,
+                    f"成员剧本含 member_complete_task（{mem_seq}）"))
+    ok_rows.append((
+        "claim_task" in mem_seq and "member_complete_task" in mem_seq
+        and mem_seq.index("claim_task") < mem_seq.index("member_complete_task"),
+        "成员先 claim 后 complete",
+    ))
+
+    # 复核员走 verify_task（HITL）
+    rev_seq = _walk_script(reviewer_body)
+    ok_rows.append(("verify_task" in rev_seq, f"复核员剧本含 verify_task（{rev_seq}）"))
 
     # 主理写完后应进入「盯看板」并带延时（给成员留窗口）
+    #
+    # 构造方式：把**剧本部分**走完（遇到带延时的动作说明已进入盯看板阶段，停），
+    # 再问下一步 —— 这正好对应真实运行时"剧本结束、活还在成员手里"的那一刻。
     late = json.loads(json.dumps(leader_body))
-    for i in range(14):
+    for i in range(40):
+        action, delay = _pick_action(late)
+        # 剧本里的延时只有 0.0 与 BUILD_TEAM_SETTLE_SECONDS；
+        # 出现 LEADER_POLL_SECONDS 就说明已经进入盯看板阶段，停在这里正好。
+        if action is None or delay == LEADER_POLL_SECONDS:
+            break
         late["messages"].append({
             "role": "assistant", "content": None,
-            "tool_calls": [{"id": f"x{i}", "type": "function",
-                            "function": {"name": "view_task", "arguments": "{}"}}],
+            "tool_calls": [{"id": f"s{i}", "type": "function",
+                            "function": {"name": action["name"],
+                                         "arguments": action["arguments"]}}],
         })
     a4, d4 = _pick_action(late)
     ok_rows.append((a4 is not None and a4["name"] == "view_task" and d4 > 0,
-                    f"主理进入盯看板且带延时（action={a4 and a4['name']}, delay={d4}s）"))
+                    f"剧本走完后进入盯看板且带延时（action={a4 and a4['name']}, delay={d4}s）"))
+
+    # 盯够 LEADER_MAX_POLLS 轮后应收尾（给最终文字答复，不再无限轮询）
+    for i in range(LEADER_MAX_POLLS + 2):
+        late["messages"].append({
+            "role": "assistant", "content": None,
+            "tool_calls": [{"id": f"p{i}", "type": "function",
+                            "function": {"name": "view_task", "arguments": "{}"}}],
+        })
+    a5, _ = _pick_action(late)
+    ok_rows.append((a5 is None, f"盯满 {LEADER_MAX_POLLS} 轮后收尾（得到 {a5 and a5['name']}）"))
 
     print("=" * 66)
     print("stub LLM 自检（不监听端口）")

@@ -125,8 +125,10 @@ python tools/run_all_checks.py     # 期望：9 通过 / 0 未通过
 | 组件 | 当前状态 | 说明 |
 |---|---|---|
 | `create_task`（任务板建单） | ✅ **已真实驱动** | 经 `TeamTaskManager.add_graph` 真实落库；见「运行层现状」 |
+| `spawn_teammate`（动态召唤成员） | ✅ **已真实驱动**（R9） | 经 `TeamBackend.spawn_member`；成员名须匹配 `[a-z][a-z0-9-]*`（**下划线非法**） |
+| `update_task` / `assign`（指派） | ✅ **已真实驱动**（R9） | assignee 能正确落库到 `team_task_*` |
 | `send_message` / `broadcast_message`（成员消息） | ✅ **已真实驱动** | 经 `TeamMessageManager` 真实流转；见「运行层现状」 |
-| `claim_task` / `member_complete_task`（成员领活/交付） | 🚧 **未跑通** | 框架原生提供；本机实测成员被 pause 后未被唤醒，**尚无运行事实** |
+| `claim_task` / `member_complete_task`（成员领活/交付） | 🚧 **未跑通** | 成员 round 从未启动（`[NativeHarness] round_id` 只对主理出现；消息 `is_read=0` 一直未读），**尚无运行事实** |
 | HITL 审批（`verify_task`） | 🚧 **未跑通** | 依赖上一条，未触发 |
 | `dispatch_mode="scheduled"` | 🚧 **规划中** | 当前实例为 `autonomous`（默认值） |
 | `enable_swarmflow` | 🚧 **规划中** | 未启用 |
@@ -147,19 +149,26 @@ python tools/run_all_checks.py     # 期望：9 通过 / 0 未通过
 - **运行层（已跑通的部分）**：`run_stub_online.py` 用**本地确定性 OpenAI 桩**
   （`tools/stub_llm_server.py`，零三方依赖）驱动**真实 `TeamAgent`**：
   主理 `build_team` 组队（6 成员全部创建成功）→ `create_task` 建单
+  → `spawn_teammate` 动态召唤成员 → `update_task`/`assign` 指派
   → `send_message` 通知，全部经框架自己的 manager **真实执行**。
-  实测任务落库为 `team_task_*.task-1 status=pending`、`task-2 status=blocked`，
-  消息落库 5 条未读，轨迹见 `runtime/coordination_*.json`。
+  实测任务落库为 `team_task_*.task-1 status=pending`（assignee 也正确落库），
+  轨迹见 `runtime/coordination_*.json`。
 - **运行层（未跑通的部分）**：成员侧的 `claim_task` / `member_complete_task`
-  **一次都没发生**。已定位原因（不是没试）：框架在 `build_team` 之后对成员执行
-  `finalize_member → pause`，此后成员退订事件；`TASK_CREATED` 这条唯一能唤醒
-  空闲成员的事件（`TaskBoardHandler._TEAMMATE_NUDGE_EVENTS`）在订阅之前发出后
-  **不补发**，广播与定向消息均未能把成员拉起。**结论：成员协同闭环未验证。**
+  **一次都没发生**。已定位到具体位置（不是没试）：整个 run 里
+  `[NativeHarness] round_id` 只为**主理**启动过，成员只有
+  `invoke start → coordination starting`，**从未开启任何模型回合**；
+  因此发给成员的定向消息在库里一直是 `is_read=0`，事件也无处落地。
+  参考：R8 曾归因于「事件错过」，R9 用 `spawn_teammate` 绕开该时序后仍是 0，
+  说明**更根本的问题是成员的 round 没启动**。**结论：成员协同闭环未验证。**
 - **在线运行**：`run_online.py` 已就绪但**零成功运行记录**，不得声称已跑通多智能体协同。
   本轮另查明一个**环境级故障**：本机 `NO_PROXY` 含带方括号的 IPv6（`[::1]`），
   会让 `openai` 3.x 依赖的 `httpx2` 在构造客户端时报
   `InvalidURL: Invalid port: ':1]'` —— **任何** OpenAI 兼容端点都无法发请求，
   与 Key 无关。详见 `docs/08-运行层实测记录.md`。
+
+> ⚠️ **复核轨迹时别用 `grep claim_task` 数事件次数** —— 工具名会出现在主理自己的
+> 提示语里，实测 grep 得 10/9，真值是 0/0。用
+> `python run_stub_online.py --verify runtime/coordination_<ts>.json`。
 
 > 这条边界在「技术方案」正文中同样如实标注。
 > 我们宁可把「主理侧已跑通、成员侧未跑通」写清楚，
@@ -362,6 +371,7 @@ faron-openjiuwen-agentgroup/
 ├── tools/
 │   ├── stub_llm_server.py         本地确定性 OpenAI 桩（零三方依赖，支持 SSE）
 │   ├── inspect_team_db.py         直查框架团队库（任务板/成员/消息的真实状态）
+│   ├── reset_team_db.py           清空团队库数据（保留表结构；别直接删 team.db）
 │   ├── gen_manifest.py            生成 资料/提交物清单.json
 │   └── run_all_checks.py          全部验证（10 步，含工作区干净闸门）
 ├── runtime/                       产出：交付物 .docx + 取证日志 .json + coordination_*.json
