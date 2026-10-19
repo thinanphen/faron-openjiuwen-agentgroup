@@ -368,6 +368,59 @@ grep -rnE '方案稿|docs/12|纯仿真|差分隐私|K 匿名|加权平均|棱镜
 处理方式是**换措辞**（如「此前误称已另行落地」），而不是删掉反思。
 仓库里已有精确脚本 `scripts/check-ui-copy.mjs`（6 项，先剔注释再判定），**优先用它**。
 
+### D20. 🆕 **不要用 `grep` 数事件次数 —— 工具名会出现在提示语里**
+
+**这条是复盘方差点报出「全过了」换来的，代价很实在。**
+
+复核运行层轨迹时第一眼用的是：
+
+```bash
+grep -c claim_task          runtime/coordination_*.json   # 得 10
+grep -c member_complete_task runtime/coordination_*.json  # 得 9
+```
+
+**差一点就写成「全过了」。** 真相是：这些词出现在**主理自己的提示语**里
+（"请 view_task 后 claim_task 开工，完成后 member_complete_task 交付"）。
+**真值是 0。**
+
+| 数法 | `claim_task` | `member_complete_task` |
+|---|---|---|
+| `grep` 文本匹配 | 10 ❌ | 9 ❌ |
+| 轨迹 `summary.by_event` / `checks` | **0** ✅ | **0** ✅ |
+
+**正确写法**：
+
+```bash
+python run_stub_online.py --verify runtime/coordination_<ts>.json
+# 打印 summary.by_event / checks / required，并按真值给结论
+```
+
+> **推广**：凡是「字符串出现在代码/文案里」与「该行为真的发生」可能不一致的场景，
+> **都不要用文本匹配当判据**。要么读结构化计数，要么读框架自身的方法调用打点。
+
+### D21. 🆕 **重跑运行层前不要删 `team.db`**
+
+删掉整个库后，框架要在同一时刻给 6 个成员建会话表（`team_task_<suffix>` 等），
+SQLite 写锁竞争会连锁触发：
+
+```
+create_message ... hit a transient DB error (OperationalError); retrying ...
+ERROR | Failed to create broadcast message ...
+```
+
+后果是 `create_task` / `spawn_teammate` **「执行了但没落地」**，
+轨迹里一条都记不到 —— **看起来极像打点坏了，实际是库坏了**。
+
+**正确做法**：
+
+```bash
+python tools/reset_team_db.py    # 只清行、保留表结构
+```
+
+> 配套纪律：**先看工具返回值，再怀疑打点。**
+> R9 还踩过一个同类的：`member_name` 用了下划线被框架拒掉，
+> 连带 `create_task` 的 assignee 校验失败，两个工具都"执行了但没落地"。
+
 ---
 
 ## 五、验证命令与「什么算绿」
@@ -457,13 +510,13 @@ cargo check           # 期望：exit=0（在 src-tauri 下）
 | `Legal-Workspace` 测试 | **75 组全绿** |
 | `Legal-Workspace` 远端 | 🔴 **落后 3 个提交**（推送被 403 拒，`thinanphen` 无 Write 权限） |
 | 硬性不合规 | ① DEMO 视频 432.5s（限 180s）② 提交包 657.4 MB（限 500 MB） |
-| 距截止 | **15 天**（2026-10-30，扣 2 天缓冲实际 13 天） |
+| 距截止 | **11 天**（2026-10-30，扣 2 天缓冲实际 9 天） |
 
 ---
 
 ## 九、如果你只想记一句话
 
 > **这个项目不缺想法，缺的是「把已做的做成可信证据」和「把硬性不合规项消掉」。**
-> 前者已有 46 + 75 组测试和可复现命令兜底；
+> 前者已有 46 + 75 组测试、一条命令（`./verify.ps1`）和可复现证据兜底；
 > 后者（**视频、体积、队名、模型 Key**）**只能由人做**。
 > **不要为了显得在干活而加新功能。**
