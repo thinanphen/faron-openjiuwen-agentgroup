@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-19T16:32:15+08:00",
+  "_生成时间": "2026-10-19T16:40:49+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -23,7 +23,7 @@
   },
   "_统计": {
     "files": 101,
-    "bytes": 47164756
+    "bytes": 47179439
   },
   "files": [
     {
@@ -46,8 +46,8 @@
     },
     {
       "path": "AI工作须知.md",
-      "bytes": 22388,
-      "sha256": "EEE08E4519C8D2CB5AED7352B6C90039EE3B4A2CA98F0C254AF57C48F9DC7F1B",
+      "bytes": 24416,
+      "sha256": "2A4807C3F58CA04394CB9F695C15D442F28577FC66EF9355D882251013FF9B01",
       "source": "git-blob"
     },
     {
@@ -100,8 +100,8 @@
     },
     {
       "path": "docs/06-进度与交接记录.md",
-      "bytes": 16452,
-      "sha256": "F11CC2ABCA59B97BF603DCB3F2129D3B7982F901D2F7E747B7D2D58E761ABB56",
+      "bytes": 20960,
+      "sha256": "476F6C76D2F1EE9660969871EA051E58E7D332139291D73C8A8DBA8B92E5166F",
       "source": "git-blob"
     },
     {
@@ -274,14 +274,14 @@
     },
     {
       "path": "决策摘要.md",
-      "bytes": 4106,
-      "sha256": "F3F8DC9D3ECA09D30CC9D060BB5C12474AEAAEBC2353B7FDCD30F1F0AC74DB50",
+      "bytes": 4580,
+      "sha256": "CE2013DE77DEF336E4E3E2DE39EF56CDEAC3B18A715BA06916E0C6DB8D3F175B",
       "source": "git-blob"
     },
     {
       "path": "接手必读.md",
-      "bytes": 20725,
-      "sha256": "7068D516BB9727F9A617CAD7E2F4B8C47C67B75AFD1F4A92739FD6B0AE161A00",
+      "bytes": 28398,
+      "sha256": "1CFE4B1EF47026BD646E7D92771C8EFF04433F3416C1B297062135A3C69A2FAD",
       "source": "git-blob"
     },
     {
