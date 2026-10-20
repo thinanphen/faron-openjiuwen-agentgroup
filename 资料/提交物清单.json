@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-20T22:32:58+08:00",
+  "_生成时间": "2026-10-20T22:38:13+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -23,7 +23,7 @@
   },
   "_统计": {
     "files": 102,
-    "bytes": 47199134
+    "bytes": 47211791
   },
   "files": [
     {
@@ -46,8 +46,8 @@
     },
     {
       "path": "AI工作须知.md",
-      "bytes": 24416,
-      "sha256": "2A4807C3F58CA04394CB9F695C15D442F28577FC66EF9355D882251013FF9B01",
+      "bytes": 26390,
+      "sha256": "9C7DCEE52AE7207443A6027AD97FE47EC6C2B5C54606048ED4A3E1C8883B98C4",
       "source": "git-blob"
     },
     {
@@ -58,8 +58,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 29873,
-      "sha256": "15504C27847C29FFA5A59BBD4E8AD99B44C552B2B731C4E20705B1EFFB4F900E",
+      "bytes": 29996,
+      "sha256": "46B5C2FD17D48F8D1F0B3C16D42AB723D9161BB65DF48D24D0F0177AC1C98A26",
       "source": "git-blob"
     },
     {
@@ -112,8 +112,8 @@
     },
     {
       "path": "docs/08-运行层实测记录.md",
-      "bytes": 14430,
-      "sha256": "5BACBFD92A8E639A5462221946F84A24C8DDDF2E9DBD68BC28A5C513A32C7586",
+      "bytes": 20027,
+      "sha256": "6A0929BFC04C0A18D2BD9803BB2768F53CF07BFA46AF1B866E275F03DCADDE8E",
       "source": "git-blob"
     },
     {
@@ -234,7 +234,7 @@
       "path": "tools/apply_wake_probes.py",
       "bytes": 19695,
       "sha256": "1A77CAD3D6384B055B2C3E7EC1C17F4BBB706C389B5CD9447CD346E0FDCCEB91",
-      "source": "working-tree"
+      "source": "git-blob"
     },
     {
       "path": "tools/inspect_team_db.py",
@@ -250,8 +250,8 @@
     },
     {
       "path": "tools/run_all_checks.py",
-      "bytes": 9738,
-      "sha256": "CE246E925D04A712486DDA8F328D4FC3424BC7ADAD73EC81448F9BC340FFA6F6",
+      "bytes": 10519,
+      "sha256": "6203EA021EDC60FD152C5079FAA8A30D65F897C059BCC1AD298CD07A3AFBCFCD",
       "source": "git-blob"
     },
     {
@@ -274,8 +274,8 @@
     },
     {
       "path": "任务台账.md",
-      "bytes": 45734,
-      "sha256": "480DA51D69271644443EAA809591AAB64D7089C96158908AD957A312CF857AB2",
+      "bytes": 49865,
+      "sha256": "4D9E1C72162A97D0418110539BD330D8290A75E922A73DCE29BA2FF59F3A733B",
       "source": "git-blob"
     },
     {
@@ -286,8 +286,8 @@
     },
     {
       "path": "接手必读.md",
-      "bytes": 28398,
-      "sha256": "1CFE4B1EF47026BD646E7D92771C8EFF04433F3416C1B297062135A3C69A2FAD",
+      "bytes": 28449,
+      "sha256": "521A6AC1D5F07AF62C5151420BE4DB0552E2C7271E31CE851D27FA0C7138804A",
       "source": "git-blob"
     },
     {
