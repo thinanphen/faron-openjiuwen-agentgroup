@@ -421,6 +421,45 @@ python tools/reset_team_db.py    # 只清行、保留表结构
 > R9 还踩过一个同类的：`member_name` 用了下划线被框架拒掉，
 > 连带 `create_task` 的 assignee 校验失败，两个工具都"执行了但没落地"。
 
+### D22. 🆕 **取证日志先存档，再跑别的脚本**
+
+**这条是复核方主动认的锅，代价是"那次运行的日志没了"。**
+
+框架日志是**按次覆盖**写的（`logs/.../run/jiuwen.log` 默认每次运行重写）。
+跑一次 `run_stub_online.py` 拿到证据后，如果紧接着跑 `run_all_checks.py`，
+**前一次的日志就被刷掉了** —— 而那次恰好是最需要复盘的一次。
+
+**纪律**：每次 stub run 结束后，**先**存档，**再**跑任何别的脚本。
+
+```powershell
+# 跑完立刻做这件事（时间戳自己换成实际值）
+Copy-Item logs\logs\run\jiuwen.log logs\archive-run-<时间戳>-jiuwen.log
+# 若把 stdout 也重定向了，一并存
+Copy-Item _run.log logs\archive-run-<时间戳>-stdout.log
+```
+
+> 注意：`logs/` 在 `.gitignore` 里，存档**不会**进版本库 —— 它是本地复盘用，
+> 结论要写进 `docs/08`，别指望靠日志文件本身交付。
+
+### D23. 🆕 **"什么都没有"时，先怀疑 `await` 卡死，而不是条件不满足**
+
+排查唤醒链时，前七轮一直在 `if` 分支上找原因（`board_tasks` 为空？`assignee` 不匹配？事件时序？），
+**全错**。真相是一个 `await` **永不返回**：
+
+```
+NativeHarness._prepare() → await ensure_initialized()   ← 6 个成员全部卡死在这里
+```
+
+它不抛异常、不打日志、不给堆栈，**唯一表现就是"什么都没发生"** ——
+和"某个 `if` 提前 return"在现象上**完全一样**，但排查方向相反。
+
+**判别方法**：在可疑链路的**每个 `await` 前后各加一行日志**，
+看最后一次打印停在哪个 `await` 之前。本轮就是靠
+`before pre_run → after pre_run →（没有 after native.start）` 一刀切出来的。
+
+> 配套做法：探针脚本化（`tools/apply_wake_probes.py`），带 `--apply/--revert/--grep`，
+> 只加 `logger.info` 不改分支。**手工改 site-packages 不可复现、也容易忘还原。**
+
 ---
 
 ## 五、验证命令与「什么算绿」

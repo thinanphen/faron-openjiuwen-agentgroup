@@ -372,6 +372,7 @@ faron-openjiuwen-agentgroup/
 │   ├── stub_llm_server.py         本地确定性 OpenAI 桩（零三方依赖，支持 SSE）
 │   ├── inspect_team_db.py         直查框架团队库（任务板/成员/消息的真实状态）
 │   ├── reset_team_db.py           清空团队库数据（保留表结构；别直接删 team.db）
+│   ├── apply_wake_probes.py       给框架打/撤唤醒链探针（只加日志，带 --apply/--revert/--grep）
 │   ├── gen_manifest.py            生成 资料/提交物清单.json
 │   └── run_all_checks.py          全部验证（10 步，含工作区干净闸门）
 ├── runtime/                       产出：交付物 .docx + 取证日志 .json + coordination_*.json

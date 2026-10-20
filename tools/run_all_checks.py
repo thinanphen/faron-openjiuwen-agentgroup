@@ -155,7 +155,7 @@ print("=" * 74)
 #    本轮实测：不先清理时 8/9，先清理后 9/9。这是**顺序 + 状态**双重依赖。
 pre_pruned = prune_runtime()
 if pre_pruned:
-    print(f"{C['y']}预处理{C['x']} runtime/ 历史产出 {len(pre_pruned)} 个（只保留最新一组）")
+    print(f"{C['y']}预处理{C['x']} runtime/ 里 {len(pre_pruned)} 个**未入库**的历史产出已清掉（已入库取证物不动）")
 
 # ---------------------------------------------------------------------------
 # 闸门：工作区必须干净
@@ -206,13 +206,22 @@ else:
     print(f"结果：{passed} 通过 / {failed} 未通过 / 共 {len(STEPS)}")
 print("=" * 74)
 
-# 跑完 demo 又会生成一组，再清理一次，保持「只剩最新一组」的不变式
+# 跑完 demo 又会生成一组，再清理一次，保持「只留未入库的」不变式
 post_pruned = prune_runtime()
 if post_pruned:
     print()
-    print(f"已清理 runtime/ 的 {len(post_pruned)} 个历史产出（只保留最新一组）：")
+    print(f"已清理 runtime/ 的 {len(post_pruned)} 个**未入库**历史产出（已入库取证物不动）：")
     for f in post_pruned:
         print(f"   - {f}")
+    # ⚠️ 这里必须单独提醒：`coordination_*.json` 是运行层取证物，
+    #    而它**默认未被跟踪**（每次 run_stub_online.py 都生成新的）。
+    #    所以本脚本跑一次就会把它删掉 —— 若你刚跑完运行层想留证据，
+    #    **先 `git add` 再跑本脚本**。提示语不说清的话，人会以为"保留了最新一组"。
+    if any("coordination_" in f for f in post_pruned):
+        print()
+        print(f"{C['y']}注意{C['x']}：上面被删的里有 coordination_*.json ——")
+        print("   那是**运行层取证物**。要留存，请先 `git add runtime/coordination_*.json`，")
+        print("   否则本脚本会把它当未入库历史产出清掉。")
 
 if failed == 0:
     print()
