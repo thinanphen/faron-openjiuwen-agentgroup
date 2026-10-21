@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-21T22:41:43+08:00",
+  "_生成时间": "2026-10-21T22:42:30+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -23,7 +23,7 @@
   },
   "_统计": {
     "files": 102,
-    "bytes": 47211791
+    "bytes": 47227627
   },
   "files": [
     {
@@ -58,8 +58,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 29996,
-      "sha256": "46B5C2FD17D48F8D1F0B3C16D42AB723D9161BB65DF48D24D0F0177AC1C98A26",
+      "bytes": 30218,
+      "sha256": "81767941B8FE43245100842C716AFD8EF21F49400249752D8ECBA1ED37166002",
       "source": "git-blob"
     },
     {
@@ -112,8 +112,8 @@
     },
     {
       "path": "docs/08-运行层实测记录.md",
-      "bytes": 20027,
-      "sha256": "6A0929BFC04C0A18D2BD9803BB2768F53CF07BFA46AF1B866E275F03DCADDE8E",
+      "bytes": 25410,
+      "sha256": "79AEDA793092C5C1760D90228A9EA590D4FD37CF6F1B045B4AF1700F6AD40879",
       "source": "git-blob"
     },
     {
@@ -142,8 +142,8 @@
     },
     {
       "path": "run_stub_online.py",
-      "bytes": 31153,
-      "sha256": "C24107FA32CC7878EEBC6C750ECF8383D327107D16E35FC06F37B666FF5E94B1",
+      "bytes": 32382,
+      "sha256": "EF29982ABC0B9DF2BE0635A2316ED902F7CCF138A225D356EDBF2E50723AB72B",
       "source": "git-blob"
     },
     {
@@ -190,14 +190,14 @@
     },
     {
       "path": "src/faron_agentgroup/config.py",
-      "bytes": 13979,
-      "sha256": "2399E8971DE05FD9C68A9945AB8079E21F1501F122CA39C6475A397030560A80",
+      "bytes": 14667,
+      "sha256": "872070EBB11B0446CB7BEE64F76D00EE2BD5917137845E0BFF2C40E474AA5AF4",
       "source": "git-blob"
     },
     {
       "path": "src/faron_agentgroup/group.py",
-      "bytes": 17325,
-      "sha256": "692D05A4DE5CDB5729B61816B7FE17E635CDA45CA7C8E8764C23F1DA2629924E",
+      "bytes": 17634,
+      "sha256": "10E8C790255B09F823167B6875C1FFF5EE8D98A9B7780814D7F26BB817271C96",
       "source": "git-blob"
     },
     {
@@ -232,8 +232,8 @@
     },
     {
       "path": "tools/apply_wake_probes.py",
-      "bytes": 19695,
-      "sha256": "1A77CAD3D6384B055B2C3E7EC1C17F4BBB706C389B5CD9447CD346E0FDCCEB91",
+      "bytes": 23320,
+      "sha256": "B54BFEC038705C023B86AF2EDD677521BE4B33363BEC8EC721F60A693F0CA3E4",
       "source": "git-blob"
     },
     {
@@ -274,8 +274,8 @@
     },
     {
       "path": "任务台账.md",
-      "bytes": 49865,
-      "sha256": "4D9E1C72162A97D0418110539BD330D8290A75E922A73DCE29BA2FF59F3A733B",
+      "bytes": 54245,
+      "sha256": "F46C524CDFCC82EC009C4613F5AA485B73B1351E3CA635466FA61B89601C501F",
       "source": "git-blob"
     },
     {
