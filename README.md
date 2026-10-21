@@ -234,6 +234,9 @@ python tools/stub_llm_server.py --selftest   # 期望：5 通过 / 0 失败
 
 # 5. 驱动真实 TeamAgent（约 5 分钟），产出 runtime/coordination_*.json
 python run_stub_online.py --timeout 340
+#   诊断开关（R11）：--members N 只保留前 N 个成员；--dispatch-mode scheduled 换派发模式
+#   python run_stub_online.py --members 1
+#   python run_stub_online.py --dispatch-mode scheduled
 #    期望：create_task ✅ / send_message ✅ / claim_task ❌ / member_complete_task ❌
 #    👆 最后两项是**当前真实水平**，没有修饰。原因见 docs/08-运行层实测记录.md
 
@@ -372,7 +375,7 @@ faron-openjiuwen-agentgroup/
 │   ├── stub_llm_server.py         本地确定性 OpenAI 桩（零三方依赖，支持 SSE）
 │   ├── inspect_team_db.py         直查框架团队库（任务板/成员/消息的真实状态）
 │   ├── reset_team_db.py           清空团队库数据（保留表结构；别直接删 team.db）
-│   ├── apply_wake_probes.py       给框架打/撤唤醒链探针（只加日志，带 --apply/--revert/--grep）
+│   ├── apply_wake_probes.py       给框架打/撤唤醒链探针（只加日志；--apply/--revert 往返**逐字节一致**）
 │   ├── gen_manifest.py            生成 资料/提交物清单.json
 │   └── run_all_checks.py          全部验证（10 步，含工作区干净闸门）
 ├── runtime/                       产出：交付物 .docx + 取证日志 .json + coordination_*.json

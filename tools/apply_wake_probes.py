@@ -58,6 +58,15 @@ MARK_C = "INITPOLL_PROBE"
 MARK_D = "DISPATCH_PROBE"
 MARK_E = "BUS_PROBE"
 MARK_F = "_PROBE"
+MARK_G = "TH_PROBE"
+MARK_H = "NH_PROBE"
+
+#: 全部探针标记（--revert 的判据）
+MARKS = (
+    MARK_A, MARK_B, MARK_C, MARK_D, MARK_E, MARK_F,
+    "STEP1_PROBE", "STEP2_PROBE", "STEP3_PROBE", "STEP4_PROBE", "STEP5_PROBE",
+    MARK_G, MARK_H,
+)
 
 # ---- 探针 A：task_board.py teammate 分支，静默 return 之前 ----
 ANCHOR_A = """            if not board_tasks:
@@ -192,6 +201,38 @@ PROBE_F3 = """        await host.seed_member_registry()
         team_logger.info("[{}] {} after seed_member_registry", member_name, \"STEP4_PROBE\")  # ── 探针 F4 ──
         await host.update_status(MemberStatus.READY)
         team_logger.info("[{}] {} after update_status(READY)", member_name, \"STEP5_PROBE\")  # ── 探针 F5 ──"""
+# ---- 探针 G：TeamHarness.start() 里 pre_run / native.start 的分界 ----
+ANCHOR_G = """        child = self._make_child_session(team_session)
+        kv_cache_harness_session_lifecycle_hook.on_harness_session_created(self, child)
+        await child.pre_run()
+        await self._native.start(session=child)"""
+
+PROBE_G = """        child = self._make_child_session(team_session)
+        kv_cache_harness_session_lifecycle_hook.on_harness_session_created(self, child)
+        logger.info("[TeamHarness] TH_PROBE before child.pre_run")
+        await child.pre_run()
+        logger.info("[TeamHarness] TH_PROBE after child.pre_run -> native.start")
+        await self._native.start(session=child)
+        logger.info("[TeamHarness] TH_PROBE after native.start")"""
+
+# ---- 探针 H：NativeHarness.start() 内部逐步（含 _prepare）----
+ANCHOR_H1 = """        self._starting = True
+        try:
+            await self._prepare()"""
+
+PROBE_H1 = """        self._starting = True
+        try:
+            logger.info("[NativeHarness] NH_PROBE step0 before _prepare")
+            await self._prepare()
+            logger.info("[NativeHarness] NH_PROBE step1 after _prepare (past the block!)")"""
+
+ANCHOR_H2 = """            await self._started_event.wait()
+            logger.info("[NativeHarness] started session=%s", self.session_id)"""
+
+PROBE_H2 = """            logger.info("[NativeHarness] NH_PROBE step5 waiting _started_event")
+            await self._started_event.wait()
+            logger.info("[NativeHarness] NH_PROBE step6 _started_event SET")
+            logger.info("[NativeHarness] started session=%s", self.session_id)"""
 # ---- 探针 D：EventBus 派发了哪些事件（含 poll 事件是否真的到达 handler）----
 ANCHOR_D = """            try:
                 if self._wake_callback:
@@ -223,6 +264,9 @@ PATCHES = [
     ("agent_teams/agent/coordination/kernel.py", ANCHOR_F1, PROBE_F1, "STEP1_PROBE"),
     ("agent_teams/agent/coordination/kernel.py", ANCHOR_F2, PROBE_F2, "STEP2_PROBE"),
     ("agent_teams/agent/coordination/kernel.py", ANCHOR_F3, PROBE_F3, "STEP4_PROBE"),
+    ("agent_teams/harness/team_harness.py", ANCHOR_G, PROBE_G, MARK_G),
+    ("agent_teams/harness/native_harness.py", ANCHOR_H1, PROBE_H1, MARK_H),
+    ("agent_teams/harness/native_harness.py", ANCHOR_H2, PROBE_H2, MARK_H),
 ]
 
 
@@ -232,14 +276,41 @@ def _pkg_root() -> Path:
     return Path(openjiuwen.__file__).resolve().parent
 
 
+def _read(p: Path) -> str:
+    """按**原样**读（newline="" 关掉通用换行转换）。
+
+    ⚠️ R11 踩过的坑：框架源码是 **LF**，而 `Path.read_text()` 会把 CRLF 归一成 LF、
+    `Path.write_text()` 在 Windows 上又把 LF 写回 CRLF —— 于是每 apply/revert 一次，
+    文件就从 11629 B 变成 11952 B，**哈希永远对不上**，看着像"还原失败"。
+    所以这里一律用 `newline=""`，不碰行尾。
+    """
+    with open(p, encoding="utf-8", newline="") as fh:
+        return fh.read()
+
+
+def _write(p: Path, text: str) -> None:
+    with open(p, "w", encoding="utf-8", newline="") as fh:
+        fh.write(text)
+
+
+def _nl(text: str) -> str:
+    """目标文件实际用的换行符。"""
+    return "\r\n" if "\r\n" in text else "\n"
+
+
+def _fit(block: str, text: str) -> str:
+    """把（以 \\n 写成的）锚点/探针块调成目标文件的行尾，再拿去比。"""
+    return block.replace("\n", _nl(text))
+
+
 def _status() -> list[tuple[Path, bool, bool]]:
     """返回 [(路径, 有探针, 锚点还在)]。"""
     root = _pkg_root()
     out = []
     for rel, anchor, _probe, mark in PATCHES:
         p = root / rel
-        text = p.read_text(encoding="utf-8") if p.exists() else ""
-        out.append((p, mark in text, anchor in text))
+        text = _read(p) if p.exists() else ""
+        out.append((p, mark in text, _fit(anchor, text) in text))
     return out
 
 
@@ -254,13 +325,13 @@ def cmd_status(verbose: bool = False) -> int:
             print(f"  ❌ 文件不存在：{rel}")
             bad += 1
             continue
-        text = p.read_text(encoding="utf-8")
+        text = _read(p)
         has_probe = mark in text
-        has_anchor = anchor in text
+        has_anchor = _fit(anchor, text) in text
         state = "已打探针" if has_probe else ("干净（锚点可打）" if has_anchor else "⚠️ 锚点漂移")
         print(f"  {rel}")
         print(f"      {state}   [探针={has_probe} 锚点={has_anchor}]")
-        if has_anchor and text.count(anchor) > 1:
+        if has_anchor and text.count(_fit(anchor, text)) > 1:
             print("      ⚠️ 锚点出现多次，拒绝打补丁")
             bad += 1
         if verbose:
@@ -270,13 +341,13 @@ def cmd_status(verbose: bool = False) -> int:
 
 
 def _apply_one(p: Path, anchor: str, probe: str, mark: str) -> str:
-    text = p.read_text(encoding="utf-8")
+    text = _read(p)
     if mark in text:
         return "skip（已有探针）"
-    n = text.count(anchor)
+    n = text.count(_fit(anchor, text))
     if n != 1:
         return f"FAIL（锚点出现 {n} 次，需恰好 1 次）"
-    p.write_text(text.replace(anchor, probe), encoding="utf-8")
+    _write(p, text.replace(_fit(anchor, text), _fit(probe, text)))
     return "ok"
 
 
@@ -292,8 +363,8 @@ def cmd_apply(dry_run: bool) -> int:
             print(f"  ❌ {rel}：文件不存在")
             fail += 1
             continue
-        text = p.read_text(encoding="utf-8")
-        n = text.count(anchor)
+        text = _read(p)
+        n = text.count(_fit(anchor, text))
         already = mark in text
         label = "已打探针" if already else f"锚点命中 {n} 次"
         print(f"  {rel}\n      {label}")
@@ -318,33 +389,37 @@ def cmd_apply(dry_run: bool) -> int:
 
 
 def cmd_revert() -> int:
+    """精确还原：把每一段探针文本**逆向替换回锚点文本**。
+
+    ⚠️ 为什么不用正则/按行删（R11 踩过的坑）：
+        早期版本用「删掉含标记的行」来还原。探针 A/C 是**多行**的
+        `team_logger.info(...)` 调用，按行删只删掉了含标记的那一行参数，
+        留下半截调用 → **把 task_board.py 改成了语法错误**。
+        而 `ANCHOR` 与 `PROBE` 是一一对应的原文，`PROBE -> ANCHOR`
+        的逐字逆向替换是**完全无损**的，多行也照原样恢复。
+    """
     root = _pkg_root()
-    print("== 还原（按探针块整段删除）==")
+    print("== 还原（probe -> anchor 逐字逆向替换）==")
     print()
-    for rel, _anchor, _probe, mark in PATCHES:
+    # ⚠️ 不要按文件去重：同一个文件可能有多段探针
+    #    （`task_board.py` 有 A 和 C 两段、`kernel.py` 有 E 和 F1–F3 四段）。
+    #    R11 第一版加了 `seen` 去重，结果每个文件只还原了第一段，
+    #    文件因此比原版**更大**（探针还在），哈希对不上。
+    for rel, anchor, probe, _mark in PATCHES:
         p = root / rel
         if not p.exists():
             print(f"  skip {rel}（不存在）")
             continue
-        text = p.read_text(encoding="utf-8")
-        if mark not in text:
-            print(f"  skip {rel}（没有探针）")
+        text = _read(p)
+        if probe not in text:
+            print(f"  skip {rel}（这段探针不在，可能已还原或锚点变了）")
             continue
-        # 探针块以「R10 探针」注释起、以「探针 X 结束」注释止，整段删除
-        pattern = re.compile(
-            r"[ \t]*# ── R10 探针 [ABCDE][^\n]*\n(?:.*?\n)*?[ \t]*# ── 探针 [ABCDE] 结束[^\n]*\n",
-            re.S,
-        )
-        new, n = pattern.subn("", text)
-        if n == 0:
-            print(f"  ⚠️ {rel}：找到标记但匹配不到探针块，请人工核对")
-            continue
-        p.write_text(new, encoding="utf-8")
-        print(f"  ok {rel}（删掉 {n} 段）")
+        n = text.count(probe)
+        _write(p, text.replace(_fit(probe, text), _fit(anchor, text)))
+        print(f"  ok {rel}（还原 {n} 段）")
     print()
-    print("  提示：还原后建议 --dry-run 再确认锚点完好。")
+    print("  建议随后 --dry-run 确认锚点完好；必要时与原始副本比对哈希。")
     return 0
-
 
 def cmd_grep(log_path: str | None) -> int:
     """从框架日志里把探针输出捞出来。"""
@@ -365,10 +440,10 @@ def cmd_grep(log_path: str | None) -> int:
         return 1
 
     for p in cands:
-        text = p.read_text(encoding="utf-8", errors="replace")
+        text = _read(p)
         lines = [
             ln for ln in text.splitlines()
-            if any(m in ln for m in (MARK_A, MARK_B, MARK_C, MARK_D, MARK_E)) or "error in wake_callback" in ln
+            if any(m in ln for m in (MARK_A, MARK_B, MARK_C, MARK_D, MARK_E, MARK_G, MARK_H)) or "error in wake_callback" in ln
         ]
         print("=" * 74)
         print(f" 日志：{p}（{len(text):,} 字符）")

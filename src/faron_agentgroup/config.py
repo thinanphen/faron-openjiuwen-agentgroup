@@ -52,6 +52,13 @@ class FaronConfig:
     enable_permissions: bool = True
     expose_human_agents_to_teammates: bool = False
 
+    # R11 诊断开关：>0 时只保留前 N 个预定义成员。
+    # 用途：成员的 NativeHarness._prepare() 在 6 个成员并发时会卡死
+    # （`_ensure_initialized` 里每成员各跑一次 workspace/skill/BM25 初始化）。
+    # 把成员数降到 1 即可判定「是并发争用还是角色路径问题」。
+    # 默认 0 = 全部成员，行为与 R10 完全一致（不改变默认行为）。
+    max_members: int = 0
+
     endpoints: List[LLMEndpoint] = field(default_factory=list)
     model_pool_strategy: str = "by_model_name"
 
@@ -74,6 +81,9 @@ def load_config_from_env() -> FaronConfig:
     return FaronConfig(
         workspace_root=os.getenv("FARON_WORKSPACE", "./runtime"),
         storage=os.getenv("FARON_STORAGE", "sqlite"),
+        # R11：两个诊断开关都从环境变量透出，默认值不变（不改变 R10 行为）
+        dispatch_mode=os.getenv("FARON_DISPATCH_MODE", "autonomous"),
+        max_members=int(os.getenv("FARON_MAX_MEMBERS", "0") or 0),
         endpoints=[
             LLMEndpoint(strong, api_key, api_base, provider, tier="strong",
                         description="主理 / 起草员：强推理与强生成"),

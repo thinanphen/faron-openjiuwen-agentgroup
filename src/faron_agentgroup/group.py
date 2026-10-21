@@ -287,7 +287,12 @@ def build_faron_spec(conf: Optional[cfg.FaronConfig] = None) -> TeamAgentSpec:
         leader=LeaderSpec(member_name=M_LEADER, display_name="小元·主理",
                           desc=cfg.LEADER_DESC, prompt=cfg.LEADER_PROMPT,
                           model_name=strong.model_name),
-        predefined_members=predefined,
+        # R11 诊断：max_members > 0 时只保留前 N 个预定义成员，
+        # 用于判定成员侧卡死是否为「多成员并发初始化争用」。
+        # 默认 0 → 原样返回全部，行为不变。
+        predefined_members=(
+            predefined[: conf.max_members] if conf.max_members > 0 else predefined
+        ),
         model_pool=[_to_pool_entry(e) for e in conf.endpoints] or [_to_pool_entry(ph)],
         model_pool_strategy=conf.model_pool_strategy,
         storage=StorageSpec(type=conf.storage),

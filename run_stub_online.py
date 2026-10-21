@@ -566,6 +566,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out-dir", default="runtime")
     ap.add_argument("--verify", metavar="JSON",
                     help="只读复核一份已有轨迹（不跑模型），打印 summary/checks")
+    # ---- R11 诊断开关（默认值与 R10 完全一致，不改变默认行为）----
+    ap.add_argument("--members", type=int, default=0, metavar="N",
+                    help="只保留前 N 个预定义成员（0=全部）。"
+                         "用于判定成员侧卡死是否由多成员并发初始化引起。")
+    ap.add_argument("--dispatch-mode", default="autonomous",
+                    choices=["autonomous", "scheduled"],
+                    help="框架派发模式。scheduled 由 scheduler 逐个起成员，"
+                         "是另一条唤醒链（不依赖 assignee 与 member_name 字符串相等）。")
     args = ap.parse_args(argv)
 
     if args.verify:
@@ -602,11 +610,21 @@ def main(argv: list[str] | None = None) -> int:
     ws = (_HERE / "runtime" / "stub-workspace").resolve()
     ws.mkdir(parents=True, exist_ok=True)
     os.environ["FARON_WORKSPACE"] = str(ws)
+    # R11 诊断开关：显式打印，避免"以为加了参数其实没生效"
+    os.environ["FARON_DISPATCH_MODE"] = args.dispatch_mode
+    if args.members > 0:
+        os.environ["FARON_MAX_MEMBERS"] = str(args.members)
+    else:
+        os.environ.pop("FARON_MAX_MEMBERS", None)
+    print(f"  诊断开关：成员上限 = {args.members or '全部（默认）'}；"
+          f"派发模式 = {args.dispatch_mode}（默认 autonomous）")
 
     from faron_agentgroup import FaronAgentGroup
     from faron_agentgroup import config as cfg
 
     conf = cfg.load_config_from_env()
+    print(f"  实际生效：dispatch_mode = {conf.dispatch_mode}，"
+          f"max_members = {conf.max_members}（0=全部）")
     print(f"  has_model = {conf.has_model}（桩让它为 True，**但这不是真模型**）")
     for e in conf.endpoints:
         print(f"    [{e.tier:6}] {e.model_name:20} @ {e.api_base_url}")
