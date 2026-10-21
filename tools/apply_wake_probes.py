@@ -60,12 +60,13 @@ MARK_E = "BUS_PROBE"
 MARK_F = "_PROBE"
 MARK_G = "TH_PROBE"
 MARK_H = "NH_PROBE"
+MARK_I = "INIT_PROBE"
 
 #: 全部探针标记（--revert 的判据）
 MARKS = (
     MARK_A, MARK_B, MARK_C, MARK_D, MARK_E, MARK_F,
     "STEP1_PROBE", "STEP2_PROBE", "STEP3_PROBE", "STEP4_PROBE", "STEP5_PROBE",
-    MARK_G, MARK_H,
+    MARK_G, MARK_H, MARK_I,
 )
 
 # ---- 探针 A：task_board.py teammate 分支，静默 return 之前 ----
@@ -233,6 +234,38 @@ PROBE_H2 = """            logger.info("[NativeHarness] NH_PROBE step5 waiting _s
             await self._started_event.wait()
             logger.info("[NativeHarness] NH_PROBE step6 _started_event SET")
             logger.info("[NativeHarness] started session=%s", self.session_id)"""
+# ---- 探针 I：DeepAgent._ensure_initialized() 内部的 4 个 await ----
+#
+# R11 实测把死点收到这里：`NativeHarness._prepare()` -> `ensure_initialized()`，
+# 主理 1 秒内过、成员无限等。本探针把这 4 个 await 逐一切开。
+#
+# ⚠️ 头号嫌疑是第 3 个：`_resolve_read_image_multimodal()` ——
+#    它就是日志里那条 `[ImageModalityProbe] image modality probed` 的来源，
+#    而那条日志**只在主理身上出现过**。它会拿一个 base64 图片去探模型端点，
+#    若在成员上下文里等一个永远不会完成的响应，表现就正好是"卡死且无日志"。
+ANCHOR_I = """        await self._register_pending_mcps()
+
+        if self._needs_workspace_init():
+            await self.init_workspace()
+
+        await self._resolve_read_image_multimodal()
+
+        self._sync_prompt_builder_references()"""
+
+PROBE_I = """        logger.info("[DeepAgent] INIT_PROBE k0 before _register_pending_mcps")
+        await self._register_pending_mcps()
+        logger.info("[DeepAgent] INIT_PROBE k1 after _register_pending_mcps")
+
+        logger.info("[DeepAgent] INIT_PROBE k2 before init_workspace (needed=%s)", self._needs_workspace_init())
+        if self._needs_workspace_init():
+            await self.init_workspace()
+        logger.info("[DeepAgent] INIT_PROBE k3 after init_workspace")
+
+        logger.info("[DeepAgent] INIT_PROBE k4 before _resolve_read_image_multimodal")
+        await self._resolve_read_image_multimodal()
+        logger.info("[DeepAgent] INIT_PROBE k5 after _resolve_read_image_multimodal")
+
+        self._sync_prompt_builder_references()"""
 # ---- 探针 D：EventBus 派发了哪些事件（含 poll 事件是否真的到达 handler）----
 ANCHOR_D = """            try:
                 if self._wake_callback:
@@ -267,6 +300,7 @@ PATCHES = [
     ("agent_teams/harness/team_harness.py", ANCHOR_G, PROBE_G, MARK_G),
     ("agent_teams/harness/native_harness.py", ANCHOR_H1, PROBE_H1, MARK_H),
     ("agent_teams/harness/native_harness.py", ANCHOR_H2, PROBE_H2, MARK_H),
+    ("harness/deep_agent.py", ANCHOR_I, PROBE_I, MARK_I),
 ]
 
 

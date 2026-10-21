@@ -609,6 +609,26 @@ def main(argv: list[str] | None = None) -> int:
     # 用**专用工作区**，避免框架 bootstrap 写文件时与 runtime/ 里的取证物抢 Windows 文件锁
     ws = (_HERE / "runtime" / "stub-workspace").resolve()
     ws.mkdir(parents=True, exist_ok=True)
+    # ── R11-B 关键修复：预置工作区已初始化标记 ────────────────────────
+    #
+    # `DeepAgent.init_workspace()` 的第一句是：
+    #     if (root / ".workspace").exists(): return
+    #     ... await DirectoryBuilder(...).build(directories)
+    #
+    # 实测（R11-B 探针 INIT_PROBE）：主理 k2→k3 通过，**5 个成员全部卡在 k2 之后**，
+    # 也就是卡在 `DirectoryBuilder.build()` 里（6 个 agent 对**同一个**工作区根
+    # 反复建目录/写模板文件，Windows 文件锁争用）。
+    #
+    # 而框架自己**从不创建这个顶层标记**（只给各子目录建 `.workspace`），
+    # 所以那个 `exists()` 短路永远不会命中 —— 每个 agent 都重跑一次 build。
+    #
+    # 预置这个标记后，所有 agent 在 `exists()` 处直接返回，build 只跑 0 次。
+    # 这不是绕过检查：框架把这个文件当作"工作区已初始化"的正式约定
+    # （子目录用的就是同一套约定，内容为 1 字节）。
+    marker = ws / ".workspace"
+    if not marker.exists():
+        marker.write_text("1", encoding="utf-8")
+        print(f"  {OK} 预置工作区标记 {marker.name}（否则 6 个 agent 会重复跑 DirectoryBuilder → 卡死）")
     os.environ["FARON_WORKSPACE"] = str(ws)
     # R11 诊断开关：显式打印，避免"以为加了参数其实没生效"
     os.environ["FARON_DISPATCH_MODE"] = args.dispatch_mode
