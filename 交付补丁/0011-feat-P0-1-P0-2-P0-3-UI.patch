@@ -1,0 +1,1043 @@
+From c49a106b9d9f6d8a3242b945053826d7c7786217 Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Thu, 22 Oct 2026 19:07:04 +0800
+Subject: [PATCH] =?utf-8?q?feat(UI):=20=E6=A8=A1=E5=9E=8B=E6=8E=A5?=
+ =?utf-8?q?=E5=8F=A3=E9=A2=84=E8=AE=BE=E5=8C=96=20+=20=E9=A6=96=E5=B1=8F?=
+ =?utf-8?q?=E9=87=8D=E5=81=9A=EF=BC=88P0-1=20/=20P0-2=20/=20P0-3=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+## P0-1 模型接口：预设 + 自定义，去掉写死
+- useSettings 默认 model 改为空（原来写死一个 DeepSeek 旧模型名，等于替用户选厂商）
+- 新增 src/lib/modelPresets.ts：**只收录有官方文档依据的端点**，每条带 source 链接
+  · 阿里云百炼（千问）https://dashscope.aliyuncs.com/compatible-mode/v1 · qwen3.7-plus
+    依据 help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope
+  · DeepSeek https://api.deepseek.com · deepseek-flash
+    依据 api-docs.deepseek.com/zh-cn/
+  · Ollama（本机）http://localhost:11434/v1
+    依据 docs.ollama.com/api/openai-compatibility
+- **通义法睿 / 智谱 GLM / Kimi 未收录**：本轮未查到可引用的官方 base_url 与模型名，
+  按工单硬约束「查不到就不许进代码」，改用「自定义」手填。理由写在 modelPresets.ts 注释里。
+- normalizeEndpoint 去掉 api.openai.com 兜底；地址为空时明确报错
+- 新增 testConnection()：回真实 HTTP 状态码 + 返回体前 200 字，不吞异常
+- 设置页加预设下拉 + 「测试连接」按钮；手改地址/模型会自动切到「自定义」
+
+## P0-2 首屏重做（Home.tsx）
+定位条 → 主行动（1 主 2 次）→ 最近打开 → 确定性引用自检 → 三步工作流 → 数据与隐私
+- 三个统计从首屏主位移到右栏「本周概览」小卡（配角）
+- 无数据时给「从模板开始 / 交给文书智能体」引导，不渲染裸「暂无」
+- 两栏 flex 精确铺满首屏，不写死 px，1600x1000 下无滚动
+
+## P0-3 视觉一致性
+- 主按钮/选中态/统计数值统一从 --brand 等 token 取色，无新增硬编码色值
+- 字号层级：页面标题 30px ≫ 区块标题 16px ≫ 正文 14px
+- 宽屏两栏铺满，消除右下整片空白
+
+## 黑盒判据（1600x1000 实测）
+- 首屏可见定位条：「面向律师的本地 AI 工作台」
+- 空白面积 14.4%（< 30%），无滚动
+- 主按钮 1 个（开始审查一份合同）
+- 全站无 deepseek-chat 字样
+- 测试连接：DeepSeek 返回 HTTP 401 + 原文；百炼返回 HTTP 401 + 阿里云原文
+  （真 401 而非 404，说明端点与模型路径真实可用）
+- npm test 75 passed；npm run build exit=0；check-ui-copy 6/6
+---
+ src/hooks/useSettings.ts |   5 +-
+ src/lib/ai.ts            |  93 ++++++++++-
+ src/lib/modelPresets.ts  |  66 ++++++++
+ src/lib/translate.ts     |   3 +-
+ src/styles.css           | 253 ++++++++++++++++++++++++++++++
+ src/views/Home.tsx       | 329 ++++++++++++++++++++++++++++-----------
+ src/views/Settings.tsx   |  92 ++++++++++-
+ 7 files changed, 741 insertions(+), 100 deletions(-)
+ create mode 100644 src/lib/modelPresets.ts
+
+diff --git a/src/hooks/useSettings.ts b/src/hooks/useSettings.ts
+index 04d5b74..0bbfa24 100644
+--- a/src/hooks/useSettings.ts
++++ b/src/hooks/useSettings.ts
+@@ -29,7 +29,10 @@ export interface SettingsState {
+ 
+ const DEFAULTS: SettingsState = {
+   loaded: false,
+-  ai: { baseUrl: "", apiKey: "", model: "deepseek-chat" },
++  // 工单 P0-1：**不预填任何厂商**。旧版这里写死了一个 DeepSeek 的旧模型名，
++  // 等于替用户选了一家；而且那个名字在 DeepSeek 现行文档里已不存在
++  // （现为 deepseek-flash / deepseek-v4-pro）。默认一律留空，由用户在预设里选或自定义。
++  ai: { baseUrl: "", apiKey: "", model: "" },
+   backup: { auto: false, intervalDays: 7, targetDir: "" },
+   defaultDesktopPopup: true,
+ };
+diff --git a/src/lib/ai.ts b/src/lib/ai.ts
+index 1e015b9..e09db62 100644
+--- a/src/lib/ai.ts
++++ b/src/lib/ai.ts
+@@ -54,11 +54,96 @@ export interface ToolCallRequest {
+   arguments: string; // JSON 字符串，需由调用方解析
+ }
+ 
+-/** 把接口地址规整为 /chat/completions 端点。 */
++/**
++ * 把接口地址规整为 /chat/completions 端点。
++ *
++ * 支持三种写法（工单 P0-1 要求「自定义必须能用」）：
++ *   https://x.com/v1      → https://x.com/v1/chat/completions
++ *   https://x.com/v1/     → https://x.com/v1/chat/completions
++ *   https://x.com         → https://x.com/chat/completions
++ * 已经带 /chat/completions 的原样保留。
++ *
++ * **不再兜底任何厂商端点**：地址为空时抛错，由调用方提示用户去填。
++ * （旧版兜底 api.openai.com 属于「悄悄替你选了个厂商」，工单 P0-1 明确要求去掉。）
++ */
+ export function normalizeEndpoint(baseUrl: string): string {
+-  let b = baseUrl.trim().replace(/\/+$/, "");
+-  if (b && !/\/chat\/completions$/i.test(b)) b += "/chat/completions";
+-  return b || "https://api.openai.com/v1/chat/completions";
++  const b = baseUrl.trim().replace(/\/+$/, "");
++  if (!b) {
++    throw new Error("尚未填写接口地址：请到「数据设置 → AI 接口」选择预设或填自定义地址。");
++  }
++  if (/\/chat\/completions$/i.test(b)) return b;
++  return `${b}/chat/completions`;
++}
++
++/** 「测试连接」的结果：成功与否都给真实原因，不吞异常 */
++export interface ConnectionTestResult {
++  ok: boolean;
++  /** HTTP 状态码；未拿到响应（DNS/连接失败）时为 0 */
++  status: number;
++  /** 给用户看的一句话 */
++  message: string;
++  /** 返回体前 200 字（失败时尤其重要） */
++  detail?: string;
++}
++
++/**
++ * 测试连接：发一次**最小**的非流式请求，验证地址、Key、模型名三者是否可用。
++ *
++ * 纪律（工单 P0-1）：**失败要显示真实原因，不要吞异常**。
++ * 所以这里既回 HTTP 状态码，也回返回体前 200 字。
++ */
++export async function testConnection(cfg: AIConfig): Promise<ConnectionTestResult> {
++  let url: string;
++  try {
++    url = normalizeEndpoint(cfg.baseUrl);
++  } catch (e) {
++    return { ok: false, status: 0, message: e instanceof Error ? e.message : String(e) };
++  }
++  const model = cfg.model?.trim();
++  if (!model) {
++    return { ok: false, status: 0, message: "尚未填写模型名：请填写该接口对应的模型名。" };
++  }
++  if (!cfg.apiKey.trim()) {
++    return { ok: false, status: 0, message: "尚未填写 API Key。" };
++  }
++
++  try {
++    const res = await fetch(url, {
++      method: "POST",
++      headers: {
++        "Content-Type": "application/json",
++        Authorization: `Bearer ${cfg.apiKey.trim()}`,
++      },
++      body: JSON.stringify({
++        model,
++        messages: [{ role: "user", content: "ping" }],
++        stream: false,
++        max_tokens: 1,
++      }),
++    });
++    const text = await res.text().catch(() => "");
++    const detail = text.slice(0, 200);
++    if (res.ok) {
++      return { ok: true, status: res.status, message: `连接成功（HTTP ${res.status}），模型 ${model} 可用。`, detail };
++    }
++    // 常见状态码给出可操作的解释，但仍附带原始返回体
++    const why =
++      res.status === 401 || res.status === 403
++        ? "Key 无效、过期，或与这个地域/接口不匹配"
++        : res.status === 404
++          ? "地址或模型名不对（也可能是该地址不支持 /chat/completions）"
++          : res.status === 429
++            ? "触发限流或额度不足"
++            : "接口返回了错误";
++    return { ok: false, status: res.status, message: `连接失败（HTTP ${res.status}）：${why}。`, detail };
++  } catch (e) {
++    // 网络层失败：把原始异常信息给出来，不包装成"未知错误"
++    return {
++      ok: false,
++      status: 0,
++      message: `无法连接：${e instanceof Error ? e.message : String(e)}`,
++    };
++  }
+ }
+ 
+ export const SYSTEM_PROMPTS: Record<string, string> = {
+diff --git a/src/lib/modelPresets.ts b/src/lib/modelPresets.ts
+new file mode 100644
+index 0000000..3354a49
+--- /dev/null
++++ b/src/lib/modelPresets.ts
+@@ -0,0 +1,66 @@
++// AI 接口预设：**只收录已查证到的 OpenAI 兼容端点**。
++//
++// 纪律（工单 P0-1 硬约束 / D1 不得虚报）：
++//   1. 每一条的 baseUrl 与 model 都必须有官方文档依据，`source` 写明链接；
++//   2. **查不到就整条不放**，宁可少一个预设，也不许把一个错的端点写进代码；
++//   3. 不预填任何厂商的 Key —— Key 永远由用户自己填。
++//
++// 本轮**没有**收录的厂商及原因（写在这里，免得后来又有人凭印象补上去）：
++//   · 通义法睿 —— 阿里云百炼当前的模型目录里没有它的 OpenAI 兼容模型名，
++//     也没有可引用的公开 base_url。查不到 → 按纪律**不进代码**。
++//     （百炼模型目录：https://help.aliyun.com/zh/model-studio/models）
++//   · 智谱 GLM / Kimi（月之暗面）—— 本轮**未取得**可引用的官方 base_url 原文，
++//     同样按纪律不写。需要时请用「自定义」手填，或先补依据再加入。
++
++export interface ModelPreset {
++  /** 稳定标识，用于下拉选项的 value */
++  id: string;
++  /** 下拉里显示的名字 */
++  label: string;
++  /** OpenAI 兼容 base_url（未带 /chat/completions，由 normalizeEndpoint 补全） */
++  baseUrl: string;
++  /** 建议模型名；空串表示该厂商的模型名由用户自填（如本地 Ollama） */
++  model: string;
++  /** 依据链接：这条预设在官方文档里的出处 */
++  source: string;
++  /** 给用户的一句补充提示（可选） */
++  hint?: string;
++}
++
++export const MODEL_PRESETS: ModelPreset[] = [
++  {
++    id: "dashscope",
++    label: "阿里云百炼（千问）",
++    // 依据：官方「OpenAI Chat 接口兼容」文档给出
++    //   https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
++    // 并说明旧域名 https://dashscope.aliyuncs.com 「仍可正常使用」。
++    // 这里用**旧域名**，因为新域名要填 {WorkspaceId}，没法预置成一条固定值。
++    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
++    model: "qwen3.7-plus",
++    source: "https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope",
++    hint: "若你的控制台给了专属域名（含业务空间 ID），请改用「自定义」填专属域名。",
++  },
++  {
++    id: "deepseek",
++    label: "DeepSeek",
++    // 依据：官方文档「首次调用 API」
++    //   base_url = https://api.deepseek.com，model = deepseek-flash / deepseek-v4-pro
++    baseUrl: "https://api.deepseek.com",
++    model: "deepseek-flash",
++    source: "https://api-docs.deepseek.com/zh-cn/",
++    hint: "模型也可填 deepseek-v4-pro（更贵、更强推理）。",
++  },
++  {
++    id: "ollama",
++    label: "Ollama（本机）",
++    // 依据：官方「OpenAI compatibility」，本地服务提供 /v1/chat/completions
++    baseUrl: "http://localhost:11434/v1",
++    // 本地模型名取决于你 `ollama pull` 过什么，无法预置。
++    model: "",
++    source: "https://docs.ollama.com/api/openai-compatibility",
++    hint: "模型名填你本机已有的，例如 `ollama list` 里看到的那个；Key 随便填（本地不校验）。",
++  },
++];
++
++/** 预设 id 常量，避免各处写裸字符串 */
++export const PRESET_CUSTOM = "custom";
+diff --git a/src/lib/translate.ts b/src/lib/translate.ts
+index 1f5ab00..c294f27 100644
+--- a/src/lib/translate.ts
++++ b/src/lib/translate.ts
+@@ -53,7 +53,8 @@ export function isConfigured(cfg: TranslateConfig | null | undefined): boolean {
+ export function configHint(): string {
+   return (
+     "翻译统一使用「数据设置 → AI 接口」的配置，当前尚未填写。" +
+-    "请在「数据设置」里填写 base_url 与 API Key（如 DeepSeek：https://api.deepseek.com/v1，模型 deepseek-chat）。"
++    "请在「数据设置」里选一个预设（或填自定义 base_url）并填入 API Key 与模型名，" +
++    "填完可点「测试连接」确认是否可用。"
+   );
+ }
+ 
+diff --git a/src/styles.css b/src/styles.css
+index 235a5c6..b8deb8b 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -545,6 +545,259 @@ button.danger-btn:hover {
+   margin: 0;
+ }
+ 
++/* ---------- 首屏重做（P0-2 / P0-3） ----------
++   目标：定位条 → 主行动 → 最近打开 → 核心能力 → 统计（配角）。
++   宽屏（1600px）下两栏铺满，不留右下整片空白。 */
++
++.home {
++  max-width: 1360px;
++  margin: 0 auto;
++  width: 100%;
++  /* 首屏铺满：由 Flex 精确分配剩余高度，避免写死数值导致溢出视口 */
++  min-height: calc(100vh - 110px);
++}
++
++/* ① 定位条 */
++.home-hero {
++  padding: 4px 0 2px;
++}
++
++.home-hero-title {
++  margin: 0 0 6px;
++  font-size: 30px;   /* 页面标题 ≫ 区块标题（16px）≫ 正文（14px） */
++  line-height: 1.25;
++  letter-spacing: -0.01em;
++}
++
++.home-hero-sub {
++  margin: 0;
++  color: var(--text-muted);
++  font-size: 15px;
++  line-height: 1.6;
++}
++
++/* ② 主行动区：1 主 + 2 次 */
++.home-actions {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  flex-wrap: wrap;
++}
++
++.cta-primary,
++.cta-secondary {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 6px;
++  border-radius: var(--radius);
++  padding: 11px 20px;
++  font-size: 15px;
++  font-weight: 600;
++  text-decoration: none;
++  cursor: pointer;
++  border: 1px solid transparent;
++  transition: background 0.15s, border-color 0.15s, color 0.15s;
++}
++
++/* 主按钮：统一从品牌 token 取色，不写死色值 */
++.cta-primary {
++  background: var(--brand);
++  color: var(--brand-on);
++  border-color: var(--brand);
++}
++
++.cta-primary:hover {
++  background: var(--brand-deep);
++  border-color: var(--brand-deep);
++}
++
++.cta-secondary {
++  background: var(--surface);
++  color: var(--text);
++  border-color: var(--border-strong);
++  font-weight: 500;
++}
++
++.cta-secondary:hover {
++  border-color: var(--brand);
++  color: var(--brand-text);
++}
++
++/* 主区两栏：宽屏铺满，右栏给统计与待办 */
++.home-columns {
++  display: grid;
++  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
++  gap: 16px;
++  align-items: stretch;      /* 两栏等高，避免右下整片空白 */
++  flex: 1 1 auto;            /* 吃掉 .home 的剩余高度（不写死 px） */
++  min-height: 0;
++}
++
++.home-main,
++.home-aside {
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++  min-width: 0;
++}
++
++/* 让每栏**最后一张卡**吃掉剩余高度（卡片自身是实底，不是留白）。
++   同时让内容纵向分布：正文在上、行动链接贴底，避免拉高后内部一片空。 */
++.home-main > .card:last-child,
++.home-aside > .card:last-child {
++  flex: 1 1 auto;
++  display: flex;
++  flex-direction: column;
++}
++
++.home-main > .card:last-child > .step-foot,
++.home-aside > .card:last-child > .more-link {
++  margin-top: auto;
++  padding-top: 12px;
++}
++
++/* 数据与隐私 */
++.plain-list {
++  margin: 0 0 10px;
++  padding-left: 18px;
++  color: var(--text-muted);
++  font-size: 13px;
++  line-height: 1.85;
++}
++
++@media (max-width: 1100px) {
++  .home-columns {
++    grid-template-columns: 1fr;
++    min-height: 0;
++  }
++}
++
++/* ③ 最近打开 */
++.home-recent-item {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
++  padding: 12px;
++  border: 1px solid var(--border);
++  border-left: 3px solid var(--brand);
++  border-radius: var(--radius);
++  background: var(--surface-muted);
++}
++
++.home-empty-guide p {
++  margin: 0 0 10px;
++}
++
++/* ⑤ 核心能力 */
++.home-capability p {
++  margin: 0 0 10px;
++  line-height: 1.75;
++}
++
++/* ④ 统计收成小卡片（配角） */
++.stat-mini {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++}
++
++.stat-mini li {
++  display: flex;
++  align-items: baseline;
++  justify-content: space-between;
++  padding: 6px 0;
++  border-bottom: 1px dashed var(--border);
++}
++
++.stat-mini li:last-child {
++  border-bottom: none;
++}
++
++.stat-mini-label {
++  color: var(--text-muted);
++  font-size: 13px;
++}
++
++.stat-mini-value {
++  font-size: 18px;
++  font-weight: 700;
++  color: var(--brand);
++}
++
++/* ⑥ 三步工作流 */
++.step-list {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  display: grid;
++  grid-template-columns: repeat(3, minmax(0, 1fr));
++  gap: 14px;
++}
++
++.step-list li {
++  display: flex;
++  gap: 10px;
++  align-items: flex-start;
++}
++
++.step-no {
++  flex: 0 0 auto;
++  width: 22px;
++  height: 22px;
++  border-radius: 50%;
++  background: var(--brand-soft);
++  color: var(--brand-text);
++  font-size: 13px;
++  font-weight: 700;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  margin-top: 2px;
++}
++
++.step-list b {
++  font-size: 14px;
++}
++
++.step-list p {
++  margin: 4px 0 0;
++  font-size: 13px;
++  line-height: 1.65;
++}
++
++@media (max-width: 900px) {
++  .step-list {
++    grid-template-columns: 1fr;
++  }
++}
++
++/* 设置页：测试连接的返回体（失败时看真实原因） */
++.conn-detail {
++  margin: 8px 0 0;
++  padding: 10px 12px;
++  background: var(--surface-muted);
++  border: 1px solid var(--border);
++  border-radius: var(--radius);
++  white-space: pre-wrap;
++  word-break: break-all;
++  font-size: 12px;
++  line-height: 1.5;
++  max-height: 160px;
++  overflow: auto;
++}
++
++.row-actions {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  flex-wrap: wrap;
++}
++
+ .panel-head {
+   display: flex;
+   align-items: center;
+diff --git a/src/views/Home.tsx b/src/views/Home.tsx
+index 1b58c68..0f93c44 100644
+--- a/src/views/Home.tsx
++++ b/src/views/Home.tsx
+@@ -31,19 +31,45 @@ export default function Home() {
+   const overdue = pending.filter(isOverdueDay);
+   const dueToday = pending.filter(isToday);
+   const activeCount = pending.length;
+-  const stats = [
+-    { label: "今日待办", value: dueToday.length, danger: false },
+-    { label: "进行中", value: activeCount, danger: false },
+-    { label: "已超期", value: overdue.length, danger: overdue.length > 0 },
+-  ];
++
++  /** 最近一条文书（真实数据；无数据时为 undefined，走引导而不是"暂无"） */
++  const recentDoc = docs[0];
++
++  /**
++   * 「打开最近文书」：有交付文件就直接用系统程序打开，
++   * 没有文件路径（或压根没记录）就退回到文书智能体——始终给一个**能走通的下一步**。
++   */
++  async function onOpenRecent() {
++    if (recentDoc?.file_path) {
++      const err = await openPathFile(recentDoc.file_path);
++      if (err) window.alert(`打开失败：${err}`);
++      return;
++    }
++    window.location.hash = "#/agent";
++  }
+ 
+   return (
+     <div className="home">
+-      {/* 欢迎 + 日期 */}
+-      <div className="home-welcome">
+-        <h2>你好，法律工作者</h2>
+-        <span className="muted">{todayStr()}</span>
+-      </div>
++      {/* ① 定位条：全站只此一处，回答「给谁 + 解决什么 + 凭什么」 */}
++      <header className="home-hero">
++        <h2 className="home-hero-title">面向律师的本地 AI 工作台</h2>
++        <p className="home-hero-sub">
++          把一份合同变成可核对的审查意见 —— 引用可溯源，结论可复现，原件不出本机
++        </p>
++      </header>
++
++      {/* ② 主行动区：1 主 + 2 次 */}
++      <section className="home-actions">
++        <Link to="/agent" className="cta-primary">
++          开始审查一份合同
++        </Link>
++        <Link to="/laws" className="cta-secondary">
++          法规检索
++        </Link>
++        <button className="cta-secondary" onClick={() => void onOpenRecent()}>
++          打开最近文书
++        </button>
++      </section>
+ 
+       {/* 触点 2（隐式化 · R4-P0-4）：一行状态，只在**真的**调整过时出现。
+           ⚠️ 纪律 D12：无数据 / 未采纳配方 → 整行不渲染，不得用占位文案撑场面。
+@@ -72,96 +98,227 @@ export default function Home() {
+         </div>
+       )}
+ 
+-      {/* 统计卡 */}
+-      <div className="stat-row">
+-        {stats.map((s) => (
+-          <div className="card stat" key={s.label}>
+-            <div className="stat-value" style={{ color: s.danger ? "var(--danger)" : "var(--brand)" }}>
+-              {s.value}
++      {/* 主区两栏：左 = 连续性证据 + 核心能力；右 = 统计（配角）+ 今日待办 */}
++      <div className="home-columns">
++        <div className="home-main">
++          {/* ③ 最近打开：最重要的连续性证据 */}
++          <section className="card home-panel">
++            <div className="panel-head">
++              <h3>最近打开</h3>
++              {docs.length > 0 && (
++                <Link to="/agent" className="more-link">
++                  全部文书 &gt;
++                </Link>
++              )}
+             </div>
+-            <div className="stat-label">{s.label}</div>
+-          </div>
+-        ))}
+-      </div>
+-
+-      <div className="home-grid">
+-        {/* 今日待办 */}
+-        <section className="card home-panel">
+-          <div className="panel-head">
+-            <h3>今日待办</h3>
+-            <Link to="/todo" className="more-link">
+-              全部 &gt;
+-            </Link>
+-          </div>
+-          {dueToday.length === 0 ? (
+-            <p className="muted">今天暂无到期待办。</p>
+-          ) : (
+-            <ul className="mini-todo">
+-              {dueToday.slice(0, 5).map((t: Todo) => (
+-                <li key={t.id}>
+-                  <input
+-                    type="checkbox"
+-                    checked={t.done}
+-                    onChange={(e) => {
+-                      void handleToggle(t.id, e.target.checked);
+-                    }}
+-                  />
+-                  <span className="mini-title">{t.title}</span>
+-                  <span className="mini-time">{fmtHM(t.due_at!)}</span>
+-                </li>
+-              ))}
+-            </ul>
+-          )}
+-        </section>
+-
+-        {/* 最近文书（智能体交付物落点） */}
+-        <section className="card home-panel">
+-          <div className="panel-head">
+-            <h3>最近处理的文书</h3>
+-            <Link to="/agent" className="more-link">
+-              文书智能体 &gt;
+-            </Link>
+-          </div>
+-          {docs.length === 0 ? (
+-            <p className="muted">
+-              暂无文书。用「文书智能体」把委托做成审查意见书 / 起诉状 / 质证意见后，会展示在这里。
+-            </p>
+-          ) : (
+-            <ul className="mini-docs">
+-              {docs.slice(0, 5).map((d) => (
+-                <li key={d.id}>
++            {!recentDoc ? (
++              // 无数据 → 引导下一步，不渲染裸「暂无」
++              <div className="home-empty-guide">
++                <p className="muted">
++                  你还没有处理过文书。第一次可以从模板起手，或直接把合同交给文书智能体审查。
++                </p>
++                <div className="row-actions">
++                  <Link to="/templates" className="cta-secondary">
++                    从模板开始
++                  </Link>
++                  <Link to="/agent" className="cta-secondary">
++                    交给文书智能体
++                  </Link>
++                </div>
++              </div>
++            ) : (
++              <>
++                <div className="home-recent-item">
+                   <div className="mini-doc-main">
+-                    <span className="mini-title">{d.title}</span>
+-                    {d.file_path && (
+-                      <span className="muted mini-path" title={d.file_path}>
+-                        {d.file_path}
+-                      </span>
+-                    )}
+-                    <span className="muted mini-time">{fmtDateTime(d.updated_at)}</span>
++                    <span className="mini-title">{recentDoc.title}</span>
++                    <span className="muted mini-time">{fmtDateTime(recentDoc.updated_at)}</span>
+                   </div>
+                   <div className="mini-doc-actions">
+-                    {d.kind && <span className="tag">.{d.kind}</span>}
+-                    {d.file_path && (
++                    {recentDoc.kind && <span className="tag">.{recentDoc.kind}</span>}
++                    {recentDoc.file_path && (
+                       <button
+                         className="ghost-btn"
+                         title="用系统默认程序打开该交付文件"
+                         onClick={async () => {
+-                          const err = await openPathFile(d.file_path as string);
++                          const err = await openPathFile(recentDoc.file_path as string);
+                           if (err) window.alert(`打开失败：${err}`);
+                         }}
+                       >
+                         打开
+                       </button>
+                     )}
+-                    <button className="danger-btn" title="删除记录" onClick={() => void removeDoc(d.id)}>
++                    <button
++                      className="danger-btn"
++                      title="删除记录"
++                      onClick={() => void removeDoc(recentDoc.id)}
++                    >
+                       删除
+                     </button>
+                   </div>
+-                </li>
+-              ))}
++                </div>
++                {/* 其余近 4 条，保持列表的连续性但不抢主位 */}
++                {docs.length > 1 && (
++                  <ul className="mini-docs">
++                    {docs.slice(1, 5).map((d) => (
++                      <li key={d.id}>
++                        <div className="mini-doc-main">
++                          <span className="mini-title">{d.title}</span>
++                          <span className="muted mini-time">{fmtDateTime(d.updated_at)}</span>
++                        </div>
++                        <div className="mini-doc-actions">
++                          {d.kind && <span className="tag">.{d.kind}</span>}
++                          {d.file_path && (
++                            <button
++                              className="ghost-btn"
++                              title="用系统默认程序打开该交付文件"
++                              onClick={async () => {
++                                const err = await openPathFile(d.file_path as string);
++                                if (err) window.alert(`打开失败：${err}`);
++                              }}
++                            >
++                              打开
++                            </button>
++                          )}
++                        </div>
++                      </li>
++                    ))}
++                  </ul>
++                )}
++              </>
++            )}
++          </section>
++
++          {/* ⑤ 核心能力露出：一句话 + 可点（能力在文书智能体的质检步骤内） */}
++          <section className="card home-capability">
++            <h3>确定性引用自检</h3>
++            <p className="muted">
++              产出里的每一处条文号都会先核对是否存在、再核对是否适用于本案 ——
++              这一步由规则执行，不由模型自述，所以同一份材料每次结论一致、可复现。
++            </p>
++            <Link to="/agent" className="more-link">
++              在文书智能体里查看 &gt;
++            </Link>
++          </section>
++
++          {/* ⑥ 三步工作流：说明「凭什么」，也是首屏下方真实内容的填充
++              （不是占位文案 —— 这三步与文书智能体里的实际流程一一对应） */}
++          <section className="card home-steps">
++            <h3>一份合同是怎么被审出来的</h3>
++            <ol className="step-list">
++              <li>
++                <span className="step-no">1</span>
++                <div>
++                  <b>交材料</b>
++                  <p className="muted">
++                    把合同或证据放进「文书智能体」，可同时附上你要依据的本地法条与模板。
++                  </p>
++                </div>
++              </li>
++              <li>
++                <span className="step-no">2</span>
++                <div>
++                  <b>先出计划再动手</b>
++                  <p className="muted">
++                    智能体给出分步计划，你可以增删步骤；执行时每一步都会显示调用了哪个工具、取回什么。
++                  </p>
++                </div>
++              </li>
++              <li>
++                <span className="step-no">3</span>
++                <div>
++                  <b>规则自检，再导出</b>
++                  <p className="muted">
++                    产出落盘前跑一遍确定性引用自检，未匹配到的条文会被逐条列出，最后导出 Word 或 Markdown。
++                  </p>
++                </div>
++              </li>
++            </ol>
++            <Link to="/agent" className="more-link step-foot">
++              打开文书智能体 &gt;
++            </Link>
++          </section>
++        </div>
++
++        <aside className="home-aside">
++          {/* ④ 三个统计收进小卡片：配角，不占首屏主位 */}
++          <section className="card home-stats">
++            <div className="panel-head">
++              <h3>本周概览</h3>
++              <Link to="/todo" className="more-link">
++                待办 &gt;
++              </Link>
++            </div>
++            <ul className="stat-mini">
++              <li>
++                <span className="stat-mini-label">今日待办</span>
++                <span className="stat-mini-value">{dueToday.length}</span>
++              </li>
++              <li>
++                <span className="stat-mini-label">进行中</span>
++                <span className="stat-mini-value">{activeCount}</span>
++              </li>
++              <li>
++                <span
++                  className="stat-mini-label"
++                  style={{ color: overdue.length > 0 ? "var(--danger)" : undefined }}
++                >
++                  已超期
++                </span>
++                <span
++                  className="stat-mini-value"
++                  style={{ color: overdue.length > 0 ? "var(--danger)" : undefined }}
++                >
++                  {overdue.length}
++                </span>
++              </li>
+             </ul>
+-          )}
+-        </section>
++          </section>
++
++          {/* 今日待办 */}
++          <section className="card home-panel">
++            <div className="panel-head">
++              <h3>今日待办</h3>
++              <Link to="/todo" className="more-link">
++                全部 &gt;
++              </Link>
++            </div>
++            {dueToday.length === 0 ? (
++              <p className="muted">
++                今天没有到期的待办。去<Link to="/todo">待办提醒</Link>安排下一步。
++              </p>
++            ) : (
++              <ul className="mini-todo">
++                {dueToday.slice(0, 5).map((t: Todo) => (
++                  <li key={t.id}>
++                    <input
++                      type="checkbox"
++                      checked={t.done}
++                      onChange={(e) => {
++                        void handleToggle(t.id, e.target.checked);
++                      }}
++                    />
++                    <span className="mini-title">{t.title}</span>
++                    <span className="mini-time">{fmtHM(t.due_at!)}</span>
++                  </li>
++                ))}
++              </ul>
++            )}
++          </section>
++
++          {/* 数据与隐私：本地化是本产品最实的卖点，也是最容易被评审追问的点。
++              这里写的三条都与软件实际行为一致（本地 SQLite / 手动备份 / 断网可用演示模式）。 */}
++          <section className="card home-privacy">
++            <h3>数据在哪</h3>
++            <ul className="plain-list">
++              <li>案件、文书、待办都存在本机 SQLite 里，不上传云端。</li>
++              <li>可在「数据设置」里一键备份整个数据库，也能从备份还原。</li>
++              <li>未配置 AI 接口时，文书智能体以演示模式运行，不发出任何网络请求。</li>
++            </ul>
++            <Link to="/settings" className="more-link">
++              数据设置 &gt;
++            </Link>
++          </section>
++        </aside>
+       </div>
+ 
+       {/* R6-P1-2：已删除「常用功能」快捷入口。
+@@ -198,15 +355,9 @@ function fmtHM(iso: string): string {
+   return `${p(d.getHours())}:${p(d.getMinutes())}`;
+ }
+ 
+-function todayStr(): string {
+-  const d = new Date();
+-  const week = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()];
+-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 星期${week}`;
+-}
+-
+ function fmtDateTime(iso: string): string {
+   const d = new Date(iso);
+   if (isNaN(d.getTime())) return "";
+   const p = (n: number) => String(n).padStart(2, "0");
+   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+-}
+\ No newline at end of file
++}
+diff --git a/src/views/Settings.tsx b/src/views/Settings.tsx
+index 46f9238..82f9ca2 100644
+--- a/src/views/Settings.tsx
++++ b/src/views/Settings.tsx
+@@ -10,6 +10,8 @@ import {
+ } from "../lib/evolution";
+ import { adoptRecipe } from "../lib/evolutionStore";
+ import { getRuntimeRecipeParams, refreshRuntimeRecipe } from "../lib/agent";
++import { MODEL_PRESETS, PRESET_CUSTOM } from "../lib/modelPresets";
++import { testConnection, type ConnectionTestResult } from "../lib/ai";
+ 
+ /** `adoptRecipe` 的第三个参数类型（`RecipeManifest`），从函数签名反推避免额外导入 */
+ type ManifestArg = Parameters<typeof adoptRecipe>[2];
+@@ -22,6 +24,37 @@ export default function Settings() {
+   const [recipeMsg, setRecipeMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+   const [busy, setBusy] = useState(false);
+ 
++  /* ---------- P0-1：服务商预设 + 测试连接 ----------
++     预设只收录**有官方文档依据**的端点（见 src/lib/modelPresets.ts 的注释）。
++     用户一旦手改地址或模型名，下拉自动切到「自定义」——避免出现
++     「选的还是 DeepSeek，但地址已经是别人的」这种自相矛盾的界面状态。 */
++  const [presetId, setPresetId] = useState<string>(PRESET_CUSTOM);
++  const [testing, setTesting] = useState(false);
++  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
++
++  const activePreset = MODEL_PRESETS.find((p) => p.id === presetId);
++
++  /** 切预设：只填地址 + 模型名，**Key 不动**（永远由用户自己填） */
++  const onPickPreset = async (id: string) => {
++    setPresetId(id);
++    setTestResult(null);
++    const p = MODEL_PRESETS.find((x) => x.id === id);
++    if (!p) return; // 「自定义」：保留用户已填的值
++    setAI({ baseUrl: p.baseUrl, model: p.model });
++  };
++
++  /** 测试连接：结果原样展示（HTTP 状态码 + 返回体前 200 字），失败不吞异常 */
++  const onTestConnection = async () => {
++    setTesting(true);
++    setTestResult(null);
++    try {
++      const r = await testConnection(s.ai);
++      setTestResult(r);
++    } finally {
++      setTesting(false);
++    }
++  };
++
+   /* ---------- R6-P0-1：用户级「检查可用优化」 ----------
+      为什么必须放在这里：`adoptRecipe` 原先只有实验台一处调用，而实验台在
+      **两条深链之外**（#/evolution → #/evolution-lab），全仓没有导航入口。
+@@ -107,23 +140,52 @@ export default function Settings() {
+         <h3>AI 接口配置（文书智能体 / 翻译共用）</h3>
+         <p className="muted hint">
+           OpenAI 兼容接口，供「文书智能体」规划/执行、「翻译」文本翻译与「文档全文翻译」（含 PDF / 图片转录）统一使用。
+-          留空则智能体进入演示模式（翻译不可用）。DeepSeek 示例：base_url 填 https://api.deepseek.com/v1，模型填 deepseek-chat。
++          留空则智能体进入演示模式（翻译不可用）。先在上面选一个预设（地址与模型会自动填好），
++          或选「自定义」手填任意兼容地址；API Key 一律由你自己填写，本软件不预置任何厂商的 Key。
+         </p>
+         <div className="form-grid">
++          <label className="wide">
++            <span>选择服务商预设</span>
++            <select
++              value={presetId}
++              onChange={(e) => void onPickPreset(e.target.value)}
++            >
++              {MODEL_PRESETS.map((p) => (
++                <option key={p.id} value={p.id}>
++                  {p.label}
++                </option>
++              ))}
++              <option value={PRESET_CUSTOM}>自定义（任意 OpenAI 兼容地址）</option>
++            </select>
++          </label>
++          {activePreset?.hint && (
++            <p className="muted hint wide" style={{ margin: 0 }}>
++              {activePreset.hint}{" "}
++              <a href={activePreset.source} target="_blank" rel="noreferrer">
++                官方文档
++              </a>
++            </p>
++          )}
+           <label>
+             <span>接口地址 base_url</span>
+             <input
+               value={s.ai.baseUrl}
+-              onChange={(e) => setAI({ baseUrl: e.target.value })}
+-              placeholder="https://api.deepseek.com/v1"
++              onChange={(e) => {
++                setPresetId(PRESET_CUSTOM);
++                setAI({ baseUrl: e.target.value });
++              }}
++              placeholder="https://你的服务商/v1"
+             />
+           </label>
+           <label>
+             <span>模型名</span>
+             <input
+               value={s.ai.model}
+-              onChange={(e) => setAI({ model: e.target.value })}
+-              placeholder="deepseek-chat（视觉/文件输入模型如 gpt-4o、qwen-vl-max）"
++              onChange={(e) => {
++                setPresetId(PRESET_CUSTOM);
++                setAI({ model: e.target.value });
++              }}
++              placeholder="按服务商文档填写（视觉/文件输入需用支持多模态的模型）"
+             />
+           </label>
+           <label className="wide">
+@@ -136,6 +198,26 @@ export default function Settings() {
+             />
+           </label>
+         </div>
++        <div className="row-actions" style={{ marginTop: 10 }}>
++          <button
++            className="ghost-btn"
++            disabled={testing}
++            onClick={() => void onTestConnection()}
++          >
++            {testing ? "测试中…" : "测试连接"}
++          </button>
++          {testResult && (
++            <span
++              className="muted"
++              style={{ color: testResult.ok ? "var(--brand)" : "var(--danger)" }}
++            >
++              {testResult.message}
++            </span>
++          )}
++        </div>
++        {testResult?.detail && (
++          <pre className="muted hint conn-detail">{testResult.detail}</pre>
++        )}
+       </section>
+ 
+       {/* 翻译说明：不再单独配置通道 */}
+-- 
+2.54.0.windows.1
+

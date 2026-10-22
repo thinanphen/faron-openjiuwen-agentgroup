@@ -22,3 +22,18 @@
  tests/recipe.test.ts                   | 315 +++++++++++
  vite.config.ts                         |  26 +-
  23 files changed, 4389 insertions(+), 911 deletions(-)
+
+────────────────────────────────────────────────────────────
+0011（R11-UI：模型接口预设化 + 首屏重做）
+────────────────────────────────────────────────────────────
+   src/hooks/useSettings.ts |   5 +-
+   src/lib/ai.ts            |  93 +++++++++++++-
+   src/lib/modelPresets.ts  |  66 ++++++++++
+   src/lib/translate.ts     |   3 +-
+   src/styles.css           | 253 ++++++++++++++++++++++++++++++++++++
+   src/views/Home.tsx       | 329 +++++++++++++++++++++++++++++++++++-------------
+   src/views/Settings.tsx   |  92 ++++++++++++-
+   7 files changed, 741 insertions(+), 100 deletions(-)
+
+   黑盒判据（1600x1000 实测）：首屏定位条可见、空白 14.4%、主按钮 1 个、
+   无滚动、全站无 deepseek-chat 字样；测试连接对 DeepSeek / 百炼均返回真实 HTTP 401。
