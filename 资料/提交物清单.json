@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-24T19:12:32+08:00",
+  "_生成时间": "2026-10-24T19:12:44+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -23,7 +23,7 @@
   },
   "_统计": {
     "files": 108,
-    "bytes": 47792553
+    "bytes": 47805144
   },
   "files": [
     {
@@ -40,8 +40,8 @@
     },
     {
       "path": ".gitignore",
-      "bytes": 1303,
-      "sha256": "D6E9A28C60CB8CB194F6F7B84B86C4A8528254EB7D028F81620FE1E025F1DC9B",
+      "bytes": 1662,
+      "sha256": "81BD5545AECCF38294160C6CEC44C57A9AB1C35962A1FE44BB0892B91C8C4C83",
       "source": "git-blob"
     },
     {
@@ -112,8 +112,8 @@
     },
     {
       "path": "docs/08-运行层实测记录.md",
-      "bytes": 30439,
-      "sha256": "80667D84DE5FB4915767BD5D794DC666202ABC8D9048C595C95FB5B8AB754022",
+      "bytes": 33526,
+      "sha256": "82708D8DFCB99AF86836E89C938BDFADE390AD6F78B36ED3E1C9FEFCB71ABFD5",
       "source": "git-blob"
     },
     {
@@ -132,19 +132,19 @@
       "path": "docs/截图/R19-测试连接-失败-HTTP401.png",
       "bytes": 108672,
       "sha256": "B3A2CEF4D77159860BCC604AFDFAA58B3705D7E9BBA68F69BEBFD65A4B81ABEB",
-      "source": "working-tree"
+      "source": "git-blob"
     },
     {
       "path": "docs/截图/R19-测试连接-成功-HTTP200.png",
       "bytes": 107424,
       "sha256": "714DA84722279B0C8964E90EC901F6EE3C49FAD12C73908AFCDB6EF0FEA0C966",
-      "source": "working-tree"
+      "source": "git-blob"
     },
     {
       "path": "docs/截图/R19-通义法睿-指引态.png",
       "bytes": 117240,
       "sha256": "704E0C3F54E3763EDB9B82F06A64D73DA766C48984B13A907E44C41E3D67AF72",
-      "source": "working-tree"
+      "source": "git-blob"
     },
     {
       "path": "probe_build.py",
@@ -280,8 +280,8 @@
     },
     {
       "path": "tools/run_all_checks.py",
-      "bytes": 10519,
-      "sha256": "6203EA021EDC60FD152C5079FAA8A30D65F897C059BCC1AD298CD07A3AFBCFCD",
+      "bytes": 11114,
+      "sha256": "C676DAB945D27DD584CADE8654727D4E4C226158844FA8EF3B90C10CCA1C0E6D",
       "source": "git-blob"
     },
     {
@@ -304,14 +304,14 @@
     },
     {
       "path": "交付说明.md",
-      "bytes": 8659,
-      "sha256": "8EAE4CF3E53DA1F15701AF147C109FAB24E4C8FC7198D9291AA34C2BBC066DE7",
+      "bytes": 11798,
+      "sha256": "309577CFE9BEBD81641043AB1127F960173E3536B99480F66C8C9B73B8574E1E",
       "source": "git-blob"
     },
     {
       "path": "任务台账.md",
-      "bytes": 61866,
-      "sha256": "D3174072F56A21D1FF7B3373CB168AD340087D76ABE21E39AF81464539B63990",
+      "bytes": 67277,
+      "sha256": "A41D5AABAC37D5E7A3C31002A4794563F3A2AD019F9CFF1E58557529A258A850",
       "source": "git-blob"
     },
     {
