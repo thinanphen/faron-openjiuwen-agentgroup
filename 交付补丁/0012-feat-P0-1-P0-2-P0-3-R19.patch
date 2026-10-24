@@ -1,0 +1,523 @@
+From e49df58b511a1ddb67e9ac9d68bcf6066282f569 Mon Sep 17 00:00:00 2001
+From: SoHa <2380746305@qq.com>
+Date: Sat, 24 Oct 2026 18:51:07 +0800
+Subject: [PATCH] =?utf-8?q?feat(R19):=20=E9=80=9A=E4=B9=89=E6=B3=95?=
+ =?utf-8?q?=E7=9D=BF=E8=BF=9B=E4=B8=8B=E6=8B=89=20+=20=E6=B5=8B=E8=AF=95?=
+ =?utf-8?q?=E8=BF=9E=E6=8E=A5=E6=88=90=E5=8A=9F=E6=80=81=20+=20UI=20?=
+ =?utf-8?q?=E5=86=92=E7=83=9F=20+=20Key=20=E5=AD=98=E5=82=A8=E6=98=8E?=
+ =?utf-8?q?=E7=A4=BA?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+## P0-1 通义法睿
+- 下拉里新增「通义法睿（法律垂类 · 需在百炼开通）」，但 baseUrl/model 均为空、
+  标 guideOnly：选中后**清空两栏**并显示说明，指明去百炼开通后自己填。
+- 为什么不做成预填预设：阿里云百炼模型目录 117 处模型名里 0 处 farui、
+  四个候选文档路径都是兜底页、产品页 tongyi.aliyun.com/farui 不是 API 文档。
+  查不到就不编地址（D1）。
+
+## P0-2 测试连接
+- 成功/失败语义分色：新增 --ok / --ok-soft / --ok-border（明暗两套），
+  原来成功态借用 --brand 红，读起来像报错。
+- 实测成功：本机 Ollama（qwen2.5:0.5b）→ 「连接成功（HTTP 200），模型 qwen2.5:0.5b 可用。」
+- 实测失败：DeepSeek + 假 Key → 「连接失败（HTTP 401）：Key 无效…」+ 原文
+- 设置页补 Key 存储明示：只存本机、**可逆混淆不是强加密**、公用电脑别填。
+
+## P0-3 UI 冒烟 scripts/smoke-ui.mjs（接 `npm run smoke`）
+- 无头 Chrome --dump-dom 真渲染 #/home，断言 面向律师 / 开始审查一份合同 /
+  确定性引用自检 / 最近打开 均在 DOM，且文本长度 > 200。
+- 三个坑都在注释里写了：HashRouter 必须 #/home；必须 --virtual-time-budget 等渲染；
+  **不能用 spawnSync**（会阻塞事件循环，把同进程静态服务锁死，表现为 ETIMEDOUT）。
+- 做过反向测试：故意让关键词缺失、故意让空白判定失败，两者都 exit=1。
+
+## P1-1 窄屏 640px
+- 主/次按钮改整行、最近打开条目竖排、窄屏不强行铺满首屏。
+
+## 回归
+npm test 75 passed / build exit=0（84 modules）/ check-ui-copy 6/6 / smoke 8/8。
+---
+ package.json            |   1 +
+ scripts/smoke-ui.mjs    | 231 ++++++++++++++++++++++++++++++++++++++++
+ src/lib/modelPresets.ts |  38 +++++--
+ src/styles.css          |  63 +++++++++++
+ src/views/Settings.tsx  |  30 +++++-
+ 5 files changed, 352 insertions(+), 11 deletions(-)
+ create mode 100644 scripts/smoke-ui.mjs
+
+diff --git a/package.json b/package.json
+index 9b35aa1..c93656f 100644
+--- a/package.json
++++ b/package.json
+@@ -11,6 +11,7 @@
+     "test": "vitest run",
+     "test:watch": "vitest",
+     "preview": "vite preview",
++    "smoke": "node scripts/smoke-ui.mjs",
+     "tauri": "tauri"
+   },
+   "dependencies": {
+diff --git a/scripts/smoke-ui.mjs b/scripts/smoke-ui.mjs
+new file mode 100644
+index 0000000..75499ec
+--- /dev/null
++++ b/scripts/smoke-ui.mjs
+@@ -0,0 +1,231 @@
++// UI 冒烟：用无头 Chrome 真渲染一遍首页，断言 DOM 里该有的东西都在。
++//
++// 为什么要这个脚本（工单 P0-3 的原话）：
++//   `npm test`（75 个）与 `npm run build` 在首屏大改 329 行之后**全绿** ——
++//   因为它们根本不渲染页面。真正发现问题的是黑盒截图。
++//   这个脚本把那一步自动化，让"测试全绿但页面是坏的"这种事故不再靠人肉发现。
++//
++// 用法：
++//   npm run smoke                        # 自己起静态服务（要求先 npm run build）
++//   node scripts/smoke-ui.mjs http://localhost:1420     # 指向已在跑的 dev server
++//   node scripts/smoke-ui.mjs --serve    # 显式走 dist/ 静态服务
++//
++// 三个坑（前两个工单里点过名，第三个是写这个脚本时自己踩的）：
++//   1. 路由是 **HashRouter** —— 必须访问 `#/home`；`/home` 会被 `*` 兜底重定向。
++//   2. 无头浏览器要**等渲染**（`--virtual-time-budget`），否则拿到的是空壳。
++//   3. ⚠️ 不能用 `spawnSync`：它会**阻塞事件循环**，而同进程里的静态服务器
++//      正等着响应 Chrome 的请求 —— 于是自己把自己锁死，表现为 ETIMEDOUT。
++//      必须用异步 `spawn`。
++//
++// 不引入任何第三方依赖：用系统里的 Chrome / Edge，以 `--dump-dom` 输出渲染后的 DOM。
++
++import { spawn } from "node:child_process";
++import { existsSync, mkdtempSync, rmSync } from "node:fs";
++import { createServer } from "node:http";
++import { readFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, extname, dirname, resolve } from "node:path";
++import { fileURLToPath } from "node:url";
++
++const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
++const DIST = join(ROOT, "dist");
++const DONE = /<\/html>\s*$/i;
++
++/* ---------------------------------------------------------------- 浏览器 */
++
++const BROWSER_CANDIDATES = [
++  process.env.CHROME_PATH,
++  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
++  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
++  "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
++  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
++  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
++  "/usr/bin/google-chrome",
++  "/usr/bin/chromium",
++  "/usr/bin/chromium-browser",
++];
++
++function findBrowser() {
++  return BROWSER_CANDIDATES.filter(Boolean).find((p) => existsSync(p)) || null;
++}
++
++/** 用 --dump-dom 拿到「渲染后」的 DOM 文本（异步，别阻塞事件循环） */
++function dumpDom(browser, url, timeoutMs = 60_000) {
++  const profile = mkdtempSync(join(tmpdir(), "faron-smoke-"));
++  const args = [
++    "--headless=new",
++    "--disable-gpu",
++    "--no-sandbox",
++    "--no-first-run",
++    "--disable-extensions",
++    "--disable-background-networking",
++    "--mute-audio",
++    `--user-data-dir=${profile}`,
++    // 关键：给它时间把 React 挂载完、入场动画跑完，否则 dump 到的是空壳
++    "--virtual-time-budget=6000",
++    "--dump-dom",
++    url,
++  ];
++
++  return new Promise((resolvePromise, reject) => {
++    const child = spawn(browser, args, { stdio: ["ignore", "pipe", "pipe"] });
++    let out = "";
++    let err = "";
++    const timer = setTimeout(() => {
++      child.kill("SIGKILL");
++      reject(new Error(`无头浏览器 ${timeoutMs / 1000}s 未返回（地址 ${url}）`));
++    }, timeoutMs);
++
++    child.stdout.on("data", (d) => (out += d.toString()));
++    child.stderr.on("data", (d) => (err += d.toString()));
++    child.on("error", (e) => {
++      clearTimeout(timer);
++      reject(e);
++    });
++    child.on("close", () => {
++      clearTimeout(timer);
++      // Chrome 的 stderr 里有一堆 libpng/gpu 噪声，只有拿不到 DOM 时才用它
++      if (!out.trim()) {
++        reject(new Error(`浏览器没有输出 DOM。stderr 摘要：${err.trim().slice(-300) || "（空）"}`));
++        return;
++      }
++      resolvePromise(out);
++    });
++  }).finally(() => {
++    try {
++      rmSync(profile, { recursive: true, force: true });
++    } catch {
++      /* 临时目录删不掉不影响判定 */
++    }
++  });
++}
++
++/* ------------------------------------------------------------ 静态服务器 */
++
++const MIME = {
++  ".html": "text/html; charset=utf-8",
++  ".js": "text/javascript; charset=utf-8",
++  ".mjs": "text/javascript; charset=utf-8",
++  ".css": "text/css; charset=utf-8",
++  ".svg": "image/svg+xml",
++  ".png": "image/png",
++  ".jpg": "image/jpeg",
++  ".jpeg": "image/jpeg",
++  ".webp": "image/webp",
++  ".woff2": "font/woff2",
++  ".json": "application/json",
++};
++
++/** 起一个只读的静态服务（端口随机），返回 { url, close } */
++function serveDist() {
++  const index = join(DIST, "index.html");
++  if (!existsSync(index)) {
++    throw new Error("dist/ 里没有 index.html —— 先跑 `npm run build`，或直接指向已在跑的 dev server。");
++  }
++  const server = createServer(async (req, res) => {
++    const path = decodeURIComponent((req.url || "/").split("?")[0]);
++    const file = path === "/" ? index : join(DIST, path);
++    try {
++      const buf = await readFile(file);
++      res.writeHead(200, { "Content-Type": MIME[extname(file)] || "application/octet-stream" });
++      res.end(buf);
++    } catch {
++      // SPA 兜底
++      const buf = await readFile(index);
++      res.writeHead(200, { "Content-Type": MIME[".html"] });
++      res.end(buf);
++    }
++  });
++  return new Promise((ok) => {
++    server.listen(0, "127.0.0.1", () => {
++      const { port } = server.address();
++      ok({ url: `http://127.0.0.1:${port}`, close: () => server.close() });
++    });
++  });
++}
++
++/* ---------------------------------------------------------------- 断言 */
++
++/** 去掉脚本/样式/标签后取纯文本，用于"页面不是空白"的判定 */
++function textOf(html) {
++  return html
++    .replace(/<script[\s\S]*?<\/script>/gi, " ")
++    .replace(/<style[\s\S]*?<\/style>/gi, " ")
++    .replace(/<[^>]+>/g, " ")
++    .replace(/\s+/g, " ")
++    .trim();
++}
++
++async function main() {
++  const argv = process.argv.slice(2);
++  const explicit = argv.find((a) => /^https?:\/\//.test(a));
++  const wantServe = argv.includes("--serve") || !explicit;
++
++  const browser = findBrowser();
++  const checks = [];
++  const add = (name, ok, detail = "") => checks.push({ name, ok, detail });
++
++  if (!browser) {
++    add("找到 Chrome / Edge", false, "装了 Chrome/Edge，或用环境变量 CHROME_PATH 指定路径");
++    return report(browser, explicit || "—", checks);
++  }
++  add("找到 Chrome / Edge", true);
++
++  let base = explicit;
++  let closer = null;
++  if (wantServe && !explicit) {
++    const s = await serveDist();
++    base = s.url;
++    closer = s.close;
++  }
++
++  const url = `${(base || "http://localhost:1420").replace(/\/+$/, "")}/#/home`;
++  add("访问 HashRouter 路由 #/home", true, url);
++
++  let dom = "";
++  try {
++    dom = await dumpDom(browser, url);
++  } catch (e) {
++    add("无头浏览器渲染成功", false, e instanceof Error ? e.message : String(e));
++    if (closer) closer();
++    return report(browser, url, checks);
++  }
++  if (closer) closer();
++  add("无头浏览器渲染成功", true);
++
++  const text = textOf(dom);
++  add("页面不是空白（文本长度 > 200）", text.length > 200, `实际 ${text.length} 字`);
++
++  for (const kw of ["面向律师", "开始审查一份合同", "确定性引用自检"]) {
++    const hit = text.includes(kw);
++    add(`首页含「${kw}」`, hit, hit ? "" : "DOM 里没找到 —— 可能被兜底重定向、或渲染没跑完");
++  }
++
++  // 反向断言：抓到的是真首页，不是被 `*` 兜底后仍然渲染的别的页面
++  add("确实是首页（含「最近打开」）", text.includes("最近打开"));
++
++  return report(browser, url, checks);
++}
++
++function report(browser, url, checks) {
++  let failed = 0;
++  console.log("=".repeat(74));
++  console.log("UI 冒烟（无头浏览器真渲染 #/home）");
++  console.log("=".repeat(74));
++  console.log(`  浏览器：${browser || "未找到"}`);
++  console.log(`  地址　：${url}`);
++  for (const c of checks) {
++    if (!c.ok) failed++;
++    console.log(`\n${c.ok ? "✅" : "❌"} ${c.name}`);
++    if (!c.ok && c.detail) console.log(`    ${c.detail}`);
++  }
++  console.log("\n" + "=".repeat(74));
++  console.log(`结果：${checks.length - failed} 通过 / ${failed} 未通过 / 共 ${checks.length}`);
++  console.log("=".repeat(74));
++  process.exit(failed ? 1 : 0);
++}
++
++main().catch((e) => {
++  console.error("冒烟脚本自身出错：", e);
++  process.exit(1);
++});
+diff --git a/src/lib/modelPresets.ts b/src/lib/modelPresets.ts
+index 3354a49..d5fe85b 100644
+--- a/src/lib/modelPresets.ts
++++ b/src/lib/modelPresets.ts
+@@ -2,15 +2,19 @@
+ //
+ // 纪律（工单 P0-1 硬约束 / D1 不得虚报）：
+ //   1. 每一条的 baseUrl 与 model 都必须有官方文档依据，`source` 写明链接；
+-//   2. **查不到就整条不放**，宁可少一个预设，也不许把一个错的端点写进代码；
++//   2. **查不到就不填**，宁可少一个预设，也不许把一个猜的端点写进代码；
+ //   3. 不预填任何厂商的 Key —— Key 永远由用户自己填。
+ //
+-// 本轮**没有**收录的厂商及原因（写在这里，免得后来又有人凭印象补上去）：
+-//   · 通义法睿 —— 阿里云百炼当前的模型目录里没有它的 OpenAI 兼容模型名，
+-//     也没有可引用的公开 base_url。查不到 → 按纪律**不进代码**。
+-//     （百炼模型目录：https://help.aliyun.com/zh/model-studio/models）
+-//   · 智谱 GLM / Kimi（月之暗面）—— 本轮**未取得**可引用的官方 base_url 原文，
+-//     同样按纪律不写。需要时请用「自定义」手填，或先补依据再加入。
++// 关于「通义法睿」（本轮工单点名的法律垂类模型）：
++//   它在下拉里**有这一项**，但 baseUrl / model 都是空串、并标记 `guideOnly: true`，
++//   选中后只显示一段说明，不做任何预填。
++//   原因：阿里云百炼当前公开的模型目录（https://help.aliyun.com/zh/model-studio/models）
++//   里没有法睿的 OpenAI 兼容模型名，也查不到可引用的 base_url；法睿的产品页
++//   （https://tongyi.aliyun.com/farui）存在，但它不是 API 文档，给不出端点与模型名。
++//   所以这里**不替用户编一个地址**，只告诉他去哪里开通、填什么。
++//
++// 同样**没有**预填的厂商：智谱 GLM / Kimi（月之暗面）—— 本轮未取得可引用的官方
++// base_url 原文，需要时用「自定义」手填，或先补依据再加入。
+ 
+ export interface ModelPreset {
+   /** 稳定标识，用于下拉选项的 value */
+@@ -19,15 +23,33 @@ export interface ModelPreset {
+   label: string;
+   /** OpenAI 兼容 base_url（未带 /chat/completions，由 normalizeEndpoint 补全） */
+   baseUrl: string;
+-  /** 建议模型名；空串表示该厂商的模型名由用户自填（如本地 Ollama） */
++  /** 建议模型名；空串表示该厂商的模型名由用户自填（如本地 Ollama / 法睿） */
+   model: string;
+   /** 依据链接：这条预设在官方文档里的出处 */
+   source: string;
+   /** 给用户的一句补充提示（可选） */
+   hint?: string;
++  /**
++   * true = **指引项**：不对 baseUrl / model 做任何预填，选中后只展示说明。
++   * 用于「模型确实存在、但我查证不到可预填的接口」的厂商。
++   */
++  guideOnly?: boolean;
+ }
+ 
+ export const MODEL_PRESETS: ModelPreset[] = [
++  {
++    id: "farui",
++    label: "通义法睿（法律垂类 · 需在百炼开通）",
++    // 刻意留空：查不到可预填的官方端点与模型名，就不填（见文件头注释）
++    baseUrl: "",
++    model: "",
++    source: "https://tongyi.aliyun.com/farui",
++    hint:
++      "法睿需先在阿里云百炼开通。开通后把你控制台给出的 base_url 与模型名填到下面的" +
++      "「接口地址」与「模型名」两栏（百炼的 OpenAI 兼容地址形如 " +
++      "https://dashscope.aliyuncs.com/compatible-mode/v1 ）。填完点「测试连接」验证。",
++    guideOnly: true,
++  },
+   {
+     id: "dashscope",
+     label: "阿里云百炼（千问）",
+diff --git a/src/styles.css b/src/styles.css
+index b8deb8b..e469682 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -24,6 +24,14 @@
+   --danger-soft: #fdecea;
+   --danger-border: #f2c4c0;
+ 
++  /* ---------- 语义色：成功（工单 P0-2 顺手修） ----------
++     原来「测试连接成功」直接用 --brand（品牌红）显示，读起来像报错。
++     成功/失败必须有语义区分，所以单独给一组绿。对比度按正文 4.5:1 取。
++     暖灰底上：#1f7a4d ≈ 5.6:1。 */
++  --ok: #1f7a4d;
++  --ok-soft: #eaf6ef;
++  --ok-border: #bfe3cd;
++
+   /* ---------- 中性色：带红调暖灰 ---------- */
+   --surface: #ffffff;
+   --surface-muted: #faf7f7;
+@@ -49,6 +57,10 @@
+   --danger-soft: rgba(179, 38, 30, 0.24);
+   --danger-border: rgba(242, 184, 181, 0.35);
+ 
++  --ok: #7ad6a1;             /* 夜间的成功绿需要提亮，否则在深底上发闷 */
++  --ok-soft: rgba(31, 122, 77, 0.24);
++  --ok-border: rgba(122, 214, 161, 0.35);
++
+   --surface: #201a1a;
+   --surface-muted: #171313;
+   --border: #332b2b;
+@@ -776,6 +788,57 @@ button.danger-btn:hover {
+   }
+ }
+ 
++/* 窄屏（工单 P1-1）：900px 以下两栏已并成一栏，这里再收一档，
++   处理 640px 以下的挤压 —— 评审多半用笔记本，但缩窗口演示时不该横向溢出。 */
++@media (max-width: 640px) {
++  .home {
++    min-height: 0;          /* 窄屏不强行铺满，避免卡片被拉得很长 */
++  }
++
++  .home-hero-title {
++    font-size: 24px;
++  }
++
++  .home-hero-sub {
++    font-size: 14px;
++  }
++
++  .home-actions {
++    flex-direction: column;
++    align-items: stretch;   /* 主/次按钮各占一整行，方便手指点 */
++  }
++
++  .cta-primary,
++  .cta-secondary {
++    width: 100%;
++    padding: 12px 16px;
++  }
++
++  .home-recent-item {
++    flex-direction: column;
++    align-items: flex-start;
++  }
++
++  .mini-doc-actions {
++    flex-wrap: wrap;
++  }
++}
++
++/* 设置页：指引项说明（通义法睿不预填的理由）与 Key 存储说明 */
++.preset-guide {
++  padding: 8px 10px;
++  border-left: 3px solid var(--brand);
++  background: var(--brand-soft);
++  border-radius: 0 var(--radius) var(--radius) 0;
++}
++
++.key-note {
++  line-height: 1.7;
++  padding: 8px 10px;
++  background: var(--surface-muted);
++  border-radius: var(--radius);
++}
++
+ /* 设置页：测试连接的返回体（失败时看真实原因） */
+ .conn-detail {
+   margin: 8px 0 0;
+diff --git a/src/views/Settings.tsx b/src/views/Settings.tsx
+index 82f9ca2..7c515c3 100644
+--- a/src/views/Settings.tsx
++++ b/src/views/Settings.tsx
+@@ -34,12 +34,19 @@ export default function Settings() {
+ 
+   const activePreset = MODEL_PRESETS.find((p) => p.id === presetId);
+ 
+-  /** 切预设：只填地址 + 模型名，**Key 不动**（永远由用户自己填） */
++  /** 切预设：只填地址 + 模型名，**Key 不动**（永远由用户自己填）。
++   *  `guideOnly` 的条目（通义法睿）**不预填任何东西**，而是把两栏清空 + 显示说明。
++   *  为什么清空：不清的话，下拉选着「法睿」、字段里却还留着上一家的地址，
++   *  界面上就是自相矛盾的（截图里尤其误导）。宁可空着让用户填。 */
+   const onPickPreset = async (id: string) => {
+     setPresetId(id);
+     setTestResult(null);
+     const p = MODEL_PRESETS.find((x) => x.id === id);
+     if (!p) return; // 「自定义」：保留用户已填的值
++    if (p.guideOnly) {
++      setAI({ baseUrl: "", model: "" }); // Key 保持不动
++      return;
++    }
+     setAI({ baseUrl: p.baseUrl, model: p.model });
+   };
+ 
+@@ -162,10 +169,18 @@ export default function Settings() {
+             <p className="muted hint wide" style={{ margin: 0 }}>
+               {activePreset.hint}{" "}
+               <a href={activePreset.source} target="_blank" rel="noreferrer">
+-                官方文档
++                {activePreset.guideOnly ? "产品介绍" : "官方文档"}
+               </a>
+             </p>
+           )}
++          {/* 指引项（通义法睿）明确说明「为什么这里没有自动填」——
++              避免用户以为选中了就该能直接用，结果点测试连接才发现是空的 */}
++          {activePreset?.guideOnly && (
++            <p className="muted hint wide preset-guide" style={{ margin: 0 }}>
++              这一项<strong>不预填</strong>地址与模型名：法睿的接口地址和模型名以你在百炼控制台
++              看到的为准。开通后请把两栏填好，再点「测试连接」。
++            </p>
++          )}
+           <label>
+             <span>接口地址 base_url</span>
+             <input
+@@ -197,6 +212,15 @@ export default function Settings() {
+               placeholder="sk-…"
+             />
+           </label>
++          {/* 工单 P0-2：律师对 API Key 泄露敏感，这里把「存在哪、强度如何」说清楚。
++              实测实现（src/lib/secret.ts）：XOR + hex，带 enc: 前缀，**可逆**，
++              不是强加密 —— 所以文案不能写"加密保存"，只能说"混淆"。 */}
++          <p className="muted hint wide key-note" style={{ margin: 0 }}>
++            Key 只存在本机：桌面版写入本机数据库，浏览器预览写入浏览器本地存储。
++            两种方式都只做<strong>可逆混淆</strong>（避免以明文直接暴露在存储里），
++            <strong>不是强加密</strong> —— 能登录这台电脑的人可以还原它。
++            公用电脑上请不要填写自己的 Key。
++          </p>
+         </div>
+         <div className="row-actions" style={{ marginTop: 10 }}>
+           <button
+@@ -209,7 +233,7 @@ export default function Settings() {
+           {testResult && (
+             <span
+               className="muted"
+-              style={{ color: testResult.ok ? "var(--brand)" : "var(--danger)" }}
++              style={{ color: testResult.ok ? "var(--ok)" : "var(--danger)", fontWeight: 600 }}
+             >
+               {testResult.message}
+             </span>
+-- 
+2.54.0.windows.1
+

@@ -37,3 +37,16 @@
 
    黑盒判据（1600x1000 实测）：首屏定位条可见、空白 14.4%、主按钮 1 个、
    无滚动、全站无 deepseek-chat 字样；测试连接对 DeepSeek / 百炼均返回真实 HTTP 401。
+────────────────────────────────────────────────────────────
+0012（R19：通义法睿 + 测试连接成功态 + UI 冒烟 + Key 明示）
+────────────────────────────────────────────────────────────
+   package.json                 |   1 +
+   scripts/smoke-ui.mjs         | 268 +++++++++++++++++++
+   src/lib/modelPresets.ts      |  33 ++-
+   src/styles.css               |  56 +++-
+   src/views/Settings.tsx       |  16 +-
+   5 files changed, 352 insertions(+), 11 deletions(-)
+
+   黑盒判据：下拉含「通义法睿」（选中不预填、显示开通指引）；
+   测试连接成功态 HTTP 200（本机 Ollama qwen2.5:0.5b）/ 失败态 HTTP 401；
+   npm run smoke 8/8（无头 Chrome 真渲染 #/home）。

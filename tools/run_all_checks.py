@@ -131,7 +131,16 @@ def prune_runtime() -> list[str]:
         return []
 
     handled: list[str] = []
-    for pattern in ("deliverable_*.docx", "runlog_*.json", "coordination_*.json"):
+    # ⚠️ `coordination_*.json` 已从删除名单移除（工单 19 §P2-1）。
+    #
+    # 为什么：它是 `run_stub_online.py` 每次运行的**运行层取证轨迹**
+    # （summary / checks / 事件计数全在这一个文件里）。它默认未跟踪，
+    # 于是旧规则会把刚跑出来的那一份直接删掉 —— 十一轮里最有价值的那次
+    # run 证据就是这么没的（D22 记的就是这件事）。
+    #
+    # 现在只清 demo 的**可再生产物**（deliverable / runlog）。
+    # 运行层轨迹留着不动：要入库就 `git add`，本脚本不再替人决定。
+    for pattern in ("deliverable_*.docx", "runlog_*.json"):
         for f in sorted(glob.glob(os.path.join(rt, pattern))):
             name = os.path.basename(f)
             rel = f"runtime/{name}"

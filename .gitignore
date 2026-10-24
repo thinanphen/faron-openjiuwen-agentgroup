@@ -89,3 +89,12 @@ _hold/
 # 运行层实测用的临时工作区：框架会往里写 AGENT.md / SOUL.md / memory 等一堆文件，
 # 属于一次性的运行期垃圾，不纳入版本库
 runtime/stub-workspace/
+
+# ---- 本轮（R19）复盘用的一次性调试产物 ----
+# 这些是跑运行层实验时临时落在仓库根的日志/脚本，属于"忘了删就会被 git add -A 扫进去"的东西。
+# 教训：`git add -A` 之前应该先看一眼 `git status`（R19 就把 _r19_clean.log 扫进去了）。
+_*.log
+_*.mjs
+_*.py
+_*.json
+!资料/提交物清单.json

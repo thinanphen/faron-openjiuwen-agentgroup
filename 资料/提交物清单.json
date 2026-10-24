@@ -2,7 +2,7 @@
   "_说明": "仓库内提交物的 SHA256 清单。用于核验提交材料完整性。",
   "_生成方式": "python tools/gen_manifest.py",
   "_校验方式": "python tools/gen_manifest.py --check",
-  "_生成时间": "2026-10-23T00:06:26+08:00",
+  "_生成时间": "2026-10-24T19:12:32+08:00",
   "_算法": "SHA256（大写十六进制）",
   "_条目来源": "git ls-files",
   "_排除项及理由": {
@@ -22,8 +22,8 @@
     "^runtime/runlog_\\d{8}-\\d{6}\\.json$": "离线演示取证日志（可复现，每次运行换时间戳）"
   },
   "_统计": {
-    "files": 105,
-    "bytes": 47459217
+    "files": 108,
+    "bytes": 47792553
   },
   "files": [
     {
@@ -127,6 +127,24 @@
       "bytes": 104635,
       "sha256": "FB8EB36D923F3B1DEB814DE2147765B8D4F72E3F4D1D9F09E000597F0D398700",
       "source": "git-blob"
+    },
+    {
+      "path": "docs/截图/R19-测试连接-失败-HTTP401.png",
+      "bytes": 108672,
+      "sha256": "B3A2CEF4D77159860BCC604AFDFAA58B3705D7E9BBA68F69BEBFD65A4B81ABEB",
+      "source": "working-tree"
+    },
+    {
+      "path": "docs/截图/R19-测试连接-成功-HTTP200.png",
+      "bytes": 107424,
+      "sha256": "714DA84722279B0C8964E90EC901F6EE3C49FAD12C73908AFCDB6EF0FEA0C966",
+      "source": "working-tree"
+    },
+    {
+      "path": "docs/截图/R19-通义法睿-指引态.png",
+      "bytes": 117240,
+      "sha256": "704E0C3F54E3763EDB9B82F06A64D73DA766C48984B13A907E44C41E3D67AF72",
+      "source": "working-tree"
     },
     {
       "path": "probe_build.py",
